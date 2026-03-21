@@ -483,256 +483,125 @@ function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, 
   ].join("\n");
 }
 
-function buildActivityPercentages(activityTotals) {
-  const counts = ACTIVITY_SECTIONS.map((section) => activityTotals[section.key]);
-  const total = counts.reduce((sum, count) => sum + count, 0);
-  if (total === 0) {
-    return ACTIVITY_SECTIONS.reduce((result, section) => ({ ...result, [section.key]: 0 }), {});
+function computeCurrentStreak(days) {
+  let streak = 0;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i].count > 0) {
+      streak++;
+    } else if (streak > 0) {
+      break;
+    }
   }
-
-  const exact = counts.map((count) => (count / total) * 100);
-  const roundedDown = exact.map((value) => Math.floor(value));
-  let remaining = 100 - roundedDown.reduce((sum, value) => sum + value, 0);
-
-  const order = exact
-    .map((value, index) => ({ index, fraction: value - roundedDown[index] }))
-    .sort((left, right) => right.fraction - left.fraction || left.index - right.index);
-
-  for (let index = 0; index < remaining; index += 1) {
-    roundedDown[order[index].index] += 1;
-  }
-
-  return ACTIVITY_SECTIONS.reduce((result, section, index) => {
-    result[section.key] = roundedDown[index];
-    return result;
-  }, {});
+  return streak;
 }
 
-function formatActivitySummary(activityTotals) {
-  const percentages = buildActivityPercentages(activityTotals);
-  const total = sumActivityTotals(activityTotals);
+function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, title }) {
+  const weeklyTotals = weeks.map((week) => week.reduce((sum, d) => sum + d.count, 0));
+  const nonZeroWeekly = weeklyTotals.filter((t) => t > 0).sort((a, b) => a - b);
+  const weekThresholds = [
+    pickThreshold(nonZeroWeekly, 0.25),
+    pickThreshold(nonZeroWeekly, 0.5),
+    pickThreshold(nonZeroWeekly, 0.75)
+  ];
+  const maxWeekly = Math.max(...weeklyTotals, 1);
+  const currentStreak = computeCurrentStreak(days);
 
-  return ACTIVITY_SECTIONS.map((section) => ({
-    key: section.key,
-    label: section.label,
-    count: activityTotals[section.key],
-    percentage: percentages[section.key],
-    total
-  }));
-}
+  const barWidth = 11;
+  const barGap = 3;
+  const barStep = barWidth + barGap;
+  const maxBarH = 60;
+  const padX = 20;
+  const numWeeks = weeks.length;
 
-function renderUserChips(users, startX, startY, maxWidth) {
-  const chipHeight = 32;
-  const gapX = 10;
-  const gapY = 10;
-  let x = startX;
-  let y = startY;
+  const width = padX + numWeeks * barStep - barGap + padX;
 
-  const chips = users.map((login) => {
-    const label = `@${login}`;
-    const chipWidth = Math.max(80, Math.ceil(estimateTextWidth(label, 14) + 36));
-    if (x !== startX && x + chipWidth > maxWidth) {
-      x = startX;
-      y += chipHeight + gapY;
+  const headerY = 14;
+  const barsBottomY = headerY + 14 + maxBarH;
+  const monthLabelY = barsBottomY + 14;
+  const dividerY = monthLabelY + 10;
+  const footerY = dividerY + 16;
+  const height = footerY + 14;
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  let lastMonth = -1;
+  const barsAndLabels = weeks.map((week, wi) => {
+    const total = weeklyTotals[wi];
+    const level = colorForCount(total, weekThresholds);
+    const barH = total === 0 ? 2 : Math.max(3, Math.round(maxBarH * total / maxWeekly));
+    const x = padX + wi * barStep;
+    const y = barsBottomY - barH;
+    const titleText = `Week of ${week[0]?.date ?? "unknown"}: ${total} contribution${total === 1 ? "" : "s"}`;
+    const bar = `<rect class="level-${level}" x="${x}" y="${y}" width="${barWidth}" height="${barH}" rx="1" ry="1"><title>${escapeXml(titleText)}</title></rect>`;
+
+    const firstOfMonth = week.find((d) => d.date.slice(8) === "01");
+    let monthLabel = "";
+    if (firstOfMonth) {
+      const monthIndex = Number.parseInt(firstOfMonth.date.slice(5, 7), 10) - 1;
+      if (monthIndex !== lastMonth) {
+        lastMonth = monthIndex;
+        monthLabel = `<text class="fg-muted" x="${x}" y="${monthLabelY}" font-size="10">${monthNames[monthIndex]}</text>`;
+      }
     }
 
-    const svg = [
-      `<g transform="translate(${x} ${y})">`,
-      `  <rect class="chip" width="${chipWidth}" height="${chipHeight}" rx="10" ry="10" />`,
-      "  <circle class=\"chip-dot\" cx=\"15\" cy=\"16\" r=\"5\" />",
-      `  <text class="fg" x="28" y="21" font-size="14" font-weight="600">${escapeXml(label)}</text>`,
-      "</g>"
-    ].join("\n");
-
-    x += chipWidth + gapX;
-    return svg;
-  }).join("\n");
-
-  return {
-    svg: chips,
-    height: y - startY + chipHeight
-  };
-}
-
-function renderRepositoryList(repositories, x, y, maxCount) {
-  if (repositories.length === 0) {
-    return {
-      svg: `<text class="fg-muted" x="${x}" y="${y}" font-size="14">No repository activity found in the selected window.</text>`,
-      height: 24
-    };
-  }
-
-  const lines = repositories.slice(0, maxCount).map((repository, index) => {
-    const lineY = y + index * 24;
-    const label = `${truncateText(repository.nameWithOwner, 34)} (${repository.totalCount})`;
-    return [
-      `<circle class="repo-dot" cx="${x + 5}" cy="${lineY - 5}" r="4" />`,
-      `<text class="accent" x="${x + 18}" y="${lineY}" font-size="15" font-weight="600">${escapeXml(label)}</text>`
-    ].join("");
+    return bar + monthLabel;
   }).join("");
 
-  const remainingCount = repositories.length - Math.min(repositories.length, maxCount);
-  const overflow = remainingCount > 0
-    ? `<text class="fg-muted" x="${x}" y="${y + Math.min(repositories.length, maxCount) * 24 + 12}" font-size="13">and ${remainingCount} other repositor${remainingCount === 1 ? "y" : "ies"}</text>`
-    : "";
-
-  return {
-    svg: `${lines}${overflow}`,
-    height: Math.min(repositories.length, maxCount) * 24 + (remainingCount > 0 ? 24 : 0)
-  };
-}
-
-function renderActivityBreakdown(rows, x, y, rowHeight) {
-  return rows.map((row, index) => {
-    const rowY = y + index * rowHeight;
-    const trackY = rowY + 10;
-    const trackWidth = 164;
-    const fillWidth = Math.max(row.percentage === 0 ? 0 : 6, Math.round(trackWidth * (row.percentage / 100)));
-
-    return [
-      `<text class="fg" x="${x}" y="${rowY}" font-size="14" font-weight="600">${escapeXml(row.label)}</text>`,
-      `<text class="fg-muted" x="${x + 222}" y="${rowY}" font-size="13" text-anchor="end">${row.percentage}%</text>`,
-      `<text class="fg-muted" x="${x + 232}" y="${rowY}" font-size="13">${row.count}</text>`,
-      `<rect class="breakdown-track" x="${x}" y="${trackY}" width="${trackWidth}" height="8" rx="999" ry="999" />`,
-      `<rect class="breakdown-fill" x="${x}" y="${trackY}" width="${fillWidth}" height="8" rx="999" ry="999" />`
-    ].join("");
-  }).join("");
-}
-
-function renderOverviewSvg({ users, dayCount, repositories, activityTotals, totalContributions, title, maxOverviewRepos }) {
-  const width = 760;
-  const padX = 28;
-  const contentWidth = width - padX * 2;
-
-  const activityRows = formatActivitySummary(activityTotals);
-  const activityContributionCount = activityRows[0]?.total || 0;
-  const repositoryCount = repositories.length;
-
+  const usersText = users.map((u) => `@${u}`).join(" · ");
   const periodText = `${formatNumber(dayCount)}-day window`;
-  const usersText = users.map((u) => `@${u}`).join("  ·  ");
+  const streakSuffix = currentStreak > 1 ? `  ·  ${formatNumber(currentStreak)}-day streak` : "";
 
-  const colGap = 28;
-  const leftColWidth = Math.floor((contentWidth - colGap) * 0.56);
-  const rightColWidth = contentWidth - colGap - leftColWidth;
-  const rightColX = padX + leftColWidth + colGap;
-
-  const labelColWidth = 108;
-  const countColWidth = 80;
-  const barTrackWidth = leftColWidth - labelColWidth - countColWidth - 8;
-  const barX = padX + labelColWidth;
-
-  const headerY = 44;
-  const titleY = 66;
-  const divider1Y = 79;
-  const statsY = 97;
-  const divider2Y = 111;
-  const sectionHeaderY = 131;
-  const rowStartY = sectionHeaderY + 20;
-  const rowHeight = 22;
-
-  const shownRepos = Math.min(repositoryCount, maxOverviewRepos);
-  const remainingCount = repositoryCount - shownRepos;
-
-  const barsEndY = rowStartY + activityRows.length * rowHeight;
-  const reposEndY = rowStartY + shownRepos * rowHeight + (remainingCount > 0 ? rowHeight : 0);
-  const contentEndY = Math.max(barsEndY, reposEndY);
-  const height = contentEndY + 32;
-
-  const description = [
-    repositoryCount === 0
-      ? `No repository activity in the last ${dayCount} days`
-      : `${formatNumber(repositoryCount)} repositories active in the last ${dayCount} days`,
-    `${formatNumber(activityContributionCount)} typed contributions`,
-    `${formatNumber(totalContributions)} total contributions`,
-    `across ${users.join(", ")}`
-  ].join(". ");
-
-  const statsTspans = [
-    `<tspan class="fg" font-weight="600">${escapeXml(formatNumber(totalContributions))}</tspan>`,
-    `<tspan class="fg-muted"> contributions  ·  </tspan>`,
-    `<tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityContributionCount))}</tspan>`,
-    `<tspan class="fg-muted"> typed  ·  </tspan>`,
-    `<tspan class="fg" font-weight="600">${escapeXml(formatNumber(repositoryCount))}</tspan>`,
-    `<tspan class="fg-muted"> repos</tspan>`
+  const footerTspans = [
+    `<tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityTotals.commits))}</tspan><tspan class="fg-muted"> commits</tspan>`,
+    `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityTotals.pullRequests))}</tspan><tspan class="fg-muted"> PRs</tspan>`,
+    `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityTotals.issues))}</tspan><tspan class="fg-muted"> issues</tspan>`,
+    `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityTotals.reviews))}</tspan><tspan class="fg-muted"> reviews</tspan>`,
+    `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(totalContributions))}</tspan><tspan class="fg-muted"> total${escapeXml(streakSuffix)}</tspan>`
   ].join("");
 
-  const barsSvg = activityRows.map((row, i) => {
-    const rowY = rowStartY + i * rowHeight;
-    const textY = rowY + 14;
-    const barY = rowY + 9;
-    const fillWidth = Math.max(row.percentage === 0 ? 0 : 4, Math.round(barTrackWidth * (row.percentage / 100)));
-    return [
-      `<text class="fg-muted" x="${padX}" y="${textY}" font-size="12">${escapeXml(row.label)}</text>`,
-      `<rect class="bar-track" x="${barX}" y="${barY}" width="${barTrackWidth}" height="4" rx="999" ry="999" />`,
-      fillWidth > 0 ? `<rect class="bar-fill" x="${barX}" y="${barY}" width="${fillWidth}" height="4" rx="999" ry="999" />` : "",
-      `<text class="fg-muted" x="${padX + leftColWidth}" y="${textY}" font-size="12" text-anchor="end">${escapeXml(`${formatNumber(row.count)} · ${row.percentage}%`)}</text>`
-    ].filter(Boolean).join("");
-  }).join("\n");
-
-  const reposSvg = [
-    ...repositories.slice(0, maxOverviewRepos).map((repo, i) => {
-      const rowY = rowStartY + i * rowHeight;
-      const name = truncateText(repo.nameWithOwner, 34);
-      return [
-        `<text class="accent" x="${rightColX}" y="${rowY + 14}" font-size="12">${escapeXml(name)}</text>`,
-        `<text class="fg-muted" x="${rightColX + rightColWidth}" y="${rowY + 14}" font-size="12" text-anchor="end">${escapeXml(formatNumber(repo.totalCount))}</text>`
-      ].join("");
-    }),
-    remainingCount > 0
-      ? `<text class="fg-muted" x="${rightColX}" y="${rowStartY + shownRepos * rowHeight + 14}" font-size="12">and ${formatNumber(remainingCount)} more</text>`
-      : "",
-    repositoryCount === 0
-      ? `<text class="fg-muted" x="${rightColX}" y="${rowStartY + 14}" font-size="12">No repository activity found.</text>`
-      : ""
-  ].filter(Boolean).join("\n");
+  const description = `Weekly activity rhythm for ${users.join(", ")} over ${dayCount} days. ${formatNumber(activityTotals.commits)} commits, ${formatNumber(activityTotals.pullRequests)} PRs, ${formatNumber(activityTotals.issues)} issues, ${formatNumber(activityTotals.reviews)} reviews. ${formatNumber(totalContributions)} total contributions.`;
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
     "  <style>",
     "    svg {",
-    "      --bg: #ffffff;",
-    "      --card-stroke: #d0d7de;",
-    "      --fg: #1f2328;",
-    "      --fg-muted: #656d76;",
+    "      --fg: #24292f;",
+    "      --fg-muted: #57606a;",
     "      --divider: #d0d7de;",
-    "      --accent: #0969da;",
-    "      --bar-track: #eaeef2;",
-    "      --bar-fill: #1f883d;",
+    "      --level-0: #ebedf0;",
+    "      --level-1: #9be9a8;",
+    "      --level-2: #40c463;",
+    "      --level-3: #30a14e;",
+    "      --level-4: #216e39;",
     "    }",
     "    @media (prefers-color-scheme: dark) {",
     "      svg {",
-    "        --bg: #0d1117;",
-    "        --card-stroke: #30363d;",
     "        --fg: #f0f6fc;",
     "        --fg-muted: #8b949e;",
     "        --divider: #30363d;",
-    "        --accent: #58a6ff;",
-    "        --bar-track: #21262d;",
-    "        --bar-fill: #3fb950;",
+    "        --level-0: #161b22;",
+    "        --level-1: #0e4429;",
+    "        --level-2: #006d32;",
+    "        --level-3: #26a641;",
+    "        --level-4: #39d353;",
     "      }",
     "    }",
     "    text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }",
-    "    .card { fill: var(--bg); stroke: var(--card-stroke); }",
     "    .fg { fill: var(--fg); }",
     "    .fg-muted { fill: var(--fg-muted); }",
-    "    .accent { fill: var(--accent); }",
     "    .divider { stroke: var(--divider); fill: none; }",
-    "    .bar-track { fill: var(--bar-track); }",
-    "    .bar-fill { fill: var(--bar-fill); }",
+    "    .level-0 { fill: var(--level-0); }",
+    "    .level-1 { fill: var(--level-1); }",
+    "    .level-2 { fill: var(--level-2); }",
+    "    .level-3 { fill: var(--level-3); }",
+    "    .level-4 { fill: var(--level-4); }",
     "  </style>",
     `  <title>${escapeXml(title)}</title>`,
     `  <desc>${escapeXml(description)}</desc>`,
-    `  <rect class="card" x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="12" ry="12" />`,
-    `  <text class="fg-muted" x="${padX}" y="${headerY}" font-size="12">${escapeXml(usersText)}</text>`,
-    `  <text class="fg-muted" x="${width - padX}" y="${headerY}" font-size="12" text-anchor="end">${escapeXml(periodText)}</text>`,
-    `  <text class="fg" x="${padX}" y="${titleY}" font-size="15" font-weight="600">${escapeXml(title)}</text>`,
-    `  <line class="divider" x1="${padX}" y1="${divider1Y}" x2="${width - padX}" y2="${divider1Y}" stroke-width="1" />`,
-    `  <text x="${padX}" y="${statsY}" font-size="13">${statsTspans}</text>`,
-    `  <line class="divider" x1="${padX}" y1="${divider2Y}" x2="${width - padX}" y2="${divider2Y}" stroke-width="1" />`,
-    `  <text class="fg" x="${padX}" y="${sectionHeaderY}" font-size="12" font-weight="600">Contribution mix</text>`,
-    `  <text class="fg" x="${rightColX}" y="${sectionHeaderY}" font-size="12" font-weight="600">Top repositories</text>`,
-    `  ${barsSvg}`,
-    `  ${reposSvg}`,
+    `  <text class="fg-muted" x="${padX}" y="${headerY}" font-size="10">${escapeXml(usersText)}</text>`,
+    `  <text class="fg-muted" x="${width - padX}" y="${headerY}" font-size="10" text-anchor="end">${escapeXml(periodText)}</text>`,
+    `  ${barsAndLabels}`,
+    `  <line class="divider" x1="${padX}" y1="${dividerY}" x2="${width - padX}" y2="${dividerY}" stroke-width="1" />`,
+    `  <text x="${padX}" y="${footerY}" font-size="11">${footerTspans}</text>`,
     "</svg>"
   ].join("\n");
 }
@@ -801,6 +670,8 @@ async function main() {
   const overviewSvg = renderOverviewSvg({
     users,
     dayCount,
+    days: renderedDays,
+    weeks,
     repositories: sortedRepositories,
     activityTotals,
     totalContributions,
