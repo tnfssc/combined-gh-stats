@@ -395,7 +395,7 @@ function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, 
     pickThreshold(nonZeroCounts, 0.75)
   ];
 
-  const cellSize = 11;
+  const cellSize = 13;
   const gap = 3;
   const left = 32;
   const top = 30;
@@ -506,7 +506,7 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
   const maxWeekly = Math.max(...weeklyTotals, 1);
   const currentStreak = computeCurrentStreak(days);
 
-  const barWidth = 11;
+  const barWidth = 13;
   const barGap = 3;
   const barStep = barWidth + barGap;
   const maxBarH = 60;
