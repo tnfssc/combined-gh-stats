@@ -1,20 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="860" height="592" viewBox="0 0 860 592" role="img" aria-label="Combined GitHub Activity Overview">
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="271" viewBox="0 0 760 271" role="img" aria-label="Combined GitHub Activity Overview">
   <style>
     svg {
       --bg: #ffffff;
       --card-stroke: #d0d7de;
       --fg: #1f2328;
       --fg-muted: #656d76;
-      --panel-bg: #f6f8fa;
-      --panel-stroke: #d8dee4;
-      --chip-bg: #f6f8fa;
-      --chip-stroke: #d8dee4;
-      --chip-dot: #1f883d;
+      --divider: #d0d7de;
       --accent: #0969da;
-      --accent-soft: #ddf4ff;
-      --breakdown-track: #eaeef2;
-      --breakdown-fill: #1f883d;
-      --repo-dot: #1f6feb;
+      --bar-track: #eaeef2;
+      --bar-fill: #1f883d;
     }
     @media (prefers-color-scheme: dark) {
       svg {
@@ -22,95 +16,38 @@
         --card-stroke: #30363d;
         --fg: #f0f6fc;
         --fg-muted: #8b949e;
-        --panel-bg: #161b22;
-        --panel-stroke: #30363d;
-        --chip-bg: #161b22;
-        --chip-stroke: #30363d;
-        --chip-dot: #39d353;
+        --divider: #30363d;
         --accent: #58a6ff;
-        --accent-soft: rgba(56, 139, 253, 0.16);
-        --breakdown-track: #21262d;
-        --breakdown-fill: #39d353;
-        --repo-dot: #58a6ff;
+        --bar-track: #21262d;
+        --bar-fill: #3fb950;
       }
     }
     text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .card { fill: var(--bg); stroke: var(--card-stroke); }
-    .panel { fill: var(--panel-bg); stroke: var(--panel-stroke); }
-    .pill { fill: var(--panel-bg); stroke: var(--panel-stroke); }
-    .callout { fill: var(--accent-soft); stroke: var(--accent); }
     .fg { fill: var(--fg); }
     .fg-muted { fill: var(--fg-muted); }
     .accent { fill: var(--accent); }
-    .chip { fill: var(--chip-bg); stroke: var(--chip-stroke); }
-    .chip-dot { fill: var(--chip-dot); }
-    .breakdown-track { fill: var(--breakdown-track); }
-    .breakdown-fill { fill: var(--breakdown-fill); }
-    .repo-dot { fill: var(--repo-dot); }
+    .divider { stroke: var(--divider); fill: none; }
+    .bar-track { fill: var(--bar-track); }
+    .bar-fill { fill: var(--bar-fill); }
   </style>
   <title>Combined GitHub Activity Overview</title>
-  <desc>Contributed to 26 repositories in the last 365 days. 848 typed contributions and 3070 calendar contributions across tnfssc, sharath-w, mykonos-ibiza.</desc>
-  <rect class="card" x="0.5" y="0.5" width="859" height="591" rx="18" ry="18" />
-  <g transform="translate(28 24)">
-  <rect class="chip" width="93" height="32" rx="10" ry="10" />
-  <circle class="chip-dot" cx="15" cy="16" r="5" />
-  <text class="fg" x="28" y="21" font-size="14" font-weight="600">@tnfssc</text>
-</g>
-<g transform="translate(131 24)">
-  <rect class="chip" width="118" height="32" rx="10" ry="10" />
-  <circle class="chip-dot" cx="15" cy="16" r="5" />
-  <text class="fg" x="28" y="21" font-size="14" font-weight="600">@sharath-w</text>
-</g>
-<g transform="translate(259 24)">
-  <rect class="chip" width="150" height="32" rx="10" ry="10" />
-  <circle class="chip-dot" cx="15" cy="16" r="5" />
-  <text class="fg" x="28" y="21" font-size="14" font-weight="600">@mykonos-ibiza</text>
-</g>
-  <text class="fg" x="28" y="86" font-size="19" font-weight="700">Combined GitHub Activity Overview</text>
-  <rect class="pill" x="710" y="67" width="122" height="28" rx="999" ry="999" />
-  <text class="fg-muted" x="771" y="86" font-size="12" font-weight="600" text-anchor="middle">365-day window</text>
-  <rect class="panel" x="28" y="104" width="804" height="112" rx="18" ry="18" />
-  <text class="fg-muted" x="52" y="132" font-size="12" font-weight="600" letter-spacing="0.08em">SUMMARY</text>
-  <text class="fg" x="52" y="162" font-size="21" font-weight="700">26 repositories were active in the last 365 days</text>
-  <text class="fg-muted" x="52" y="186" font-size="14">3,070 calendar contributions across 3 accounts</text>
-  <rect class="callout" x="612" y="122" width="196" height="68" rx="16" ry="16" />
-  <text class="accent" x="636" y="146" font-size="12" font-weight="600">TYPED CONTRIBUTIONS</text>
-  <text class="fg" x="636" y="176" font-size="30" font-weight="700">848</text>
-  <text class="fg-muted" x="52" y="202" font-size="13">Commits led the mix at 78%</text>
-  <rect class="panel" x="28" y="232" width="257.3333333333333" height="84" rx="16" ry="16" />
-<text class="fg-muted" x="48" y="257" font-size="12" font-weight="600">Calendar contributions</text>
-<text class="fg" x="48" y="286" font-size="26" font-weight="700">3,070</text>
-<text class="fg-muted" x="48" y="304" font-size="11">Tracked across 365-day window</text>
-<rect class="panel" x="301.3333333333333" y="232" width="257.3333333333333" height="84" rx="16" ry="16" />
-<text class="fg-muted" x="321.3333333333333" y="257" font-size="12" font-weight="600">Typed contributions</text>
-<text class="fg" x="321.3333333333333" y="286" font-size="26" font-weight="700">848</text>
-<text class="fg-muted" x="321.3333333333333" y="304" font-size="11">Commits, PRs, issues, and reviews</text>
-<rect class="panel" x="574.6666666666666" y="232" width="257.3333333333333" height="84" rx="16" ry="16" />
-<text class="fg-muted" x="594.6666666666666" y="257" font-size="12" font-weight="600">Repositories touched</text>
-<text class="fg" x="594.6666666666666" y="286" font-size="26" font-weight="700">26</text>
-<text class="fg-muted" x="594.6666666666666" y="304" font-size="11">Showing the top 3 below</text>
-  <rect class="panel" x="28" y="332" width="482" height="232" rx="18" ry="18" />
-  <text class="fg" x="52" y="362" font-size="17" font-weight="700">Contribution mix</text>
-  <text class="fg-muted" x="52" y="384" font-size="13">How typed contributions were distributed across the selected window.</text>
-  <text class="fg" x="52" y="414" font-size="14" font-weight="600">Commits</text>
-<text class="fg-muted" x="486" y="414" font-size="13" text-anchor="end">663 · 78%</text>
-<rect class="breakdown-track" x="52" y="424" width="434" height="8" rx="999" ry="999" />
-<rect class="breakdown-fill" x="52" y="424" width="339" height="8" rx="999" ry="999" />
-<text class="fg" x="52" y="452" font-size="14" font-weight="600">Pull requests</text>
-<text class="fg-muted" x="486" y="452" font-size="13" text-anchor="end">139 · 16%</text>
-<rect class="breakdown-track" x="52" y="462" width="434" height="8" rx="999" ry="999" />
-<rect class="breakdown-fill" x="52" y="462" width="69" height="8" rx="999" ry="999" />
-<text class="fg" x="52" y="490" font-size="14" font-weight="600">Issues</text>
-<text class="fg-muted" x="486" y="490" font-size="13" text-anchor="end">29 · 4%</text>
-<rect class="breakdown-track" x="52" y="500" width="434" height="8" rx="999" ry="999" />
-<rect class="breakdown-fill" x="52" y="500" width="17" height="8" rx="999" ry="999" />
-<text class="fg" x="52" y="528" font-size="14" font-weight="600">Code review</text>
-<text class="fg-muted" x="486" y="528" font-size="13" text-anchor="end">17 · 2%</text>
-<rect class="breakdown-track" x="52" y="538" width="434" height="8" rx="999" ry="999" />
-<rect class="breakdown-fill" x="52" y="538" width="9" height="8" rx="999" ry="999" />
-  <rect class="panel" x="526" y="332" width="306" height="232" rx="18" ry="18" />
-  <text class="fg" x="550" y="362" font-size="17" font-weight="700">Top repositories</text>
-  <text class="fg-muted" x="550" y="384" font-size="13">Where activity was most concentrated.</text>
-  <circle class="repo-dot" cx="555" cy="421" r="4" /><text class="accent" x="568" y="426" font-size="15" font-weight="600">kortix-ai/suna (556)</text><circle class="repo-dot" cx="555" cy="445" r="4" /><text class="accent" x="568" y="450" font-size="15" font-weight="600">tnfssc/sharath.boi.gg (77)</text><circle class="repo-dot" cx="555" cy="469" r="4" /><text class="accent" x="568" y="474" font-size="15" font-weight="600">tnfssc/skillz (51)</text><text class="fg-muted" x="550" y="510" font-size="13">and 23 other repositories</text>
-  <text class="fg-muted" x="550" y="540" font-size="12">Showing 3 of 26 repositories</text>
+  <desc>5 repositories active in the last 365 days. 106 typed contributions. 102 total contributions. across alice, bob</desc>
+  <rect class="card" x="0.5" y="0.5" width="759" height="270" rx="12" ry="12" />
+  <text class="fg-muted" x="28" y="44" font-size="12">@alice  ·  @bob</text>
+  <text class="fg-muted" x="732" y="44" font-size="12" text-anchor="end">365-day window</text>
+  <text class="fg" x="28" y="66" font-size="15" font-weight="600">Combined GitHub Activity Overview</text>
+  <line class="divider" x1="28" y1="79" x2="732" y2="79" stroke-width="1" />
+  <text x="28" y="97" font-size="13"><tspan class="fg" font-weight="600">102</tspan><tspan class="fg-muted"> contributions  ·  </tspan><tspan class="fg" font-weight="600">106</tspan><tspan class="fg-muted"> typed  ·  </tspan><tspan class="fg" font-weight="600">5</tspan><tspan class="fg-muted"> repos</tspan></text>
+  <line class="divider" x1="28" y1="111" x2="732" y2="111" stroke-width="1" />
+  <text class="fg" x="28" y="131" font-size="12" font-weight="600">Contribution mix</text>
+  <text class="fg" x="434" y="131" font-size="12" font-weight="600">Top repositories</text>
+  <text class="fg-muted" x="28" y="165" font-size="12">Commits</text><rect class="bar-track" x="136" y="160" width="182" height="4" rx="999" ry="999" /><rect class="bar-fill" x="136" y="160" width="107" height="4" rx="999" ry="999" /><text class="fg-muted" x="406" y="165" font-size="12" text-anchor="end">62 · 59%</text>
+<text class="fg-muted" x="28" y="187" font-size="12">Pull requests</text><rect class="bar-track" x="136" y="182" width="182" height="4" rx="999" ry="999" /><rect class="bar-fill" x="136" y="182" width="31" height="4" rx="999" ry="999" /><text class="fg-muted" x="406" y="187" font-size="12" text-anchor="end">18 · 17%</text>
+<text class="fg-muted" x="28" y="209" font-size="12">Issues</text><rect class="bar-track" x="136" y="204" width="182" height="4" rx="999" ry="999" /><rect class="bar-fill" x="136" y="204" width="22" height="4" rx="999" ry="999" /><text class="fg-muted" x="406" y="209" font-size="12" text-anchor="end">13 · 12%</text>
+<text class="fg-muted" x="28" y="231" font-size="12">Code review</text><rect class="bar-track" x="136" y="226" width="182" height="4" rx="999" ry="999" /><rect class="bar-fill" x="136" y="226" width="22" height="4" rx="999" ry="999" /><text class="fg-muted" x="406" y="231" font-size="12" text-anchor="end">13 · 12%</text>
+  <text class="accent" x="434" y="165" font-size="12">acme/platform-core</text><text class="fg-muted" x="732" y="165" font-size="12" text-anchor="end">30</text>
+<text class="accent" x="434" y="187" font-size="12">acme/design-system</text><text class="fg-muted" x="732" y="187" font-size="12" text-anchor="end">10</text>
+<text class="accent" x="434" y="209" font-size="12">bob/devtools-kit</text><text class="fg-muted" x="732" y="209" font-size="12" text-anchor="end">9</text>
+<text class="fg-muted" x="434" y="231" font-size="12">and 2 more</text>
 </svg>
