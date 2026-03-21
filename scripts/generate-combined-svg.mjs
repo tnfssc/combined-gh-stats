@@ -142,6 +142,10 @@ function truncateText(text, maxLength) {
   return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
+function formatNumber(n) {
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 function envKeyForUser(login) {
   return `GITHUB_TOKEN_${login.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
 }
@@ -597,26 +601,79 @@ function renderActivityBreakdown(rows, x, y, rowHeight) {
 
 function renderOverviewSvg({ users, dayCount, repositories, activityTotals, totalContributions, title, maxOverviewRepos }) {
   const width = 860;
-  const outerPadding = 24;
-  const chipLayout = renderUserChips(users, outerPadding, outerPadding, width - outerPadding);
-  const sectionTop = outerPadding + chipLayout.height + 28;
-  const dividerX = 438;
-  const leftX = 32;
-  const rightX = 474;
-  const listStartY = sectionTop + 122;
-  const repositoryCount = repositories.length;
+  const padX = 28;
+
+  const chipLayout = renderUserChips(users, padX, 24, width - padX * 2);
+  const chipBottom = 24 + chipLayout.height;
+
   const activityRows = formatActivitySummary(activityTotals);
   const activityContributionCount = activityRows[0]?.total || 0;
+  const repositoryCount = repositories.length;
+
+  // Vertical layout: chips → title row → separator → stats → separator → breakdown label → bars → repos
+  const titleY = chipBottom + 24;
+  const sep1Y = titleY + 18;
+  const statsNumY = sep1Y + 36;
+  const statsLabelY = statsNumY + 18;
+  const sep2Y = statsLabelY + 22;
+  const breakdownLabelY = sep2Y + 22;
+  const barsStart = breakdownLabelY + 18;
+  const barRowHeight = 44;
+  const reposBaselineY = barsStart + activityRows.length * barRowHeight + 22;
+  const height = reposBaselineY + 28;
+
   const repositorySummary = repositoryCount === 0
     ? `No repositories contributed to in the last ${dayCount} days`
     : `Contributed to ${repositoryCount} repositor${repositoryCount === 1 ? "y" : "ies"} in the last ${dayCount} days`;
-  const accountSummary = `${users.length} account${users.length === 1 ? "" : "s"} combined`;
   const description = `${repositorySummary}. ${activityContributionCount} typed contributions and ${totalContributions} calendar contributions across ${users.join(", ")}.`;
-  const repositoryList = renderRepositoryList(repositories, leftX, listStartY, maxOverviewRepos);
-  const leftFooterY = listStartY + repositoryList.height + 26;
-  const rightRowsY = sectionTop + 74;
-  const rightFooterY = rightRowsY + activityRows.length * 42 + 14;
-  const height = Math.max(sectionTop + 232, leftFooterY + 28, rightFooterY + 28);
+
+  // Four key stats displayed as large numbers
+  const statCellWidth = (width - padX * 2) / 4;
+  const statItems = [
+    { value: formatNumber(totalContributions), label: "calendar contributions" },
+    { value: formatNumber(activityContributionCount), label: "typed contributions" },
+    { value: formatNumber(repositoryCount), label: "repositories" },
+    { value: formatNumber(dayCount), label: "days tracked" }
+  ];
+  const statsSvg = statItems.map((item, i) => {
+    const x = padX + i * statCellWidth;
+    return [
+      `<text class="fg" x="${x}" y="${statsNumY}" font-size="24" font-weight="700">${escapeXml(item.value)}</text>`,
+      `<text class="fg-muted" x="${x}" y="${statsLabelY}" font-size="12">${escapeXml(item.label)}</text>`
+    ].join("\n");
+  }).join("\n");
+
+  // Full-width activity bars
+  const barLabelWidth = 120;
+  const barTrackWidth = width - padX * 2 - barLabelWidth - 110;
+  const barX = padX + barLabelWidth;
+  const barCountX = width - padX;
+  const barPctX = barCountX - 52;
+  const barsSvg = activityRows.map((row, i) => {
+    const y = barsStart + i * barRowHeight;
+    const fillWidth = Math.max(row.percentage === 0 ? 0 : 4, Math.round(barTrackWidth * (row.percentage / 100)));
+    return [
+      `<text class="fg" x="${padX}" y="${y + 14}" font-size="14" font-weight="600">${escapeXml(row.label)}</text>`,
+      `<rect class="breakdown-track" x="${barX}" y="${y + 4}" width="${barTrackWidth}" height="10" rx="999" ry="999" />`,
+      `<rect class="breakdown-fill" x="${barX}" y="${y + 4}" width="${fillWidth}" height="10" rx="999" ry="999" />`,
+      `<text class="fg-muted" x="${barPctX}" y="${y + 14}" font-size="13" text-anchor="end">${row.percentage}%</text>`,
+      `<text class="fg-muted" x="${barCountX}" y="${y + 14}" font-size="13" text-anchor="end">${escapeXml(formatNumber(row.count))}</text>`
+    ].join("\n");
+  }).join("\n");
+
+  // Top repos as an inline text line at the bottom
+  const topRepos = repositories.slice(0, maxOverviewRepos);
+  const remainingCount = repositories.length - topRepos.length;
+  let reposSvgStr;
+  if (repositories.length === 0) {
+    reposSvgStr = `<text class="fg-muted" x="${padX}" y="${reposBaselineY}" font-size="13">No repository activity in the last ${dayCount} days</text>`;
+  } else {
+    const repoNames = topRepos.map((r) => truncateText(r.nameWithOwner, 35)).join("  ·  ");
+    const overflow = remainingCount > 0 ? `  ·  and ${remainingCount} more` : "";
+    reposSvgStr = `<text class="fg-muted" x="${padX}" y="${reposBaselineY}" font-size="13">${escapeXml(repoNames + overflow)}</text>`;
+  }
+
+  const periodText = `${formatNumber(dayCount)}-day window`;
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
@@ -629,8 +686,6 @@ function renderOverviewSvg({ users, dayCount, repositories, activityTotals, tota
     "      --chip-bg: #f6f8fa;",
     "      --chip-stroke: #d8dee4;",
     "      --chip-dot: #1f883d;",
-    "      --accent: #0969da;",
-    "      --repo-dot: #2f81f7;",
     "      --breakdown-track: #eaeef2;",
     "      --breakdown-fill: #1f883d;",
     "    }",
@@ -643,8 +698,6 @@ function renderOverviewSvg({ users, dayCount, repositories, activityTotals, tota
     "        --chip-bg: #161b22;",
     "        --chip-stroke: #30363d;",
     "        --chip-dot: #39d353;",
-    "        --accent: #58a6ff;",
-    "        --repo-dot: #58a6ff;",
     "        --breakdown-track: #21262d;",
     "        --breakdown-fill: #39d353;",
     "      }",
@@ -655,9 +708,7 @@ function renderOverviewSvg({ users, dayCount, repositories, activityTotals, tota
     "    .fg-muted { fill: var(--fg-muted); }",
     "    .chip { fill: var(--chip-bg); stroke: var(--chip-stroke); }",
     "    .chip-dot { fill: var(--chip-dot); }",
-    "    .divider { stroke: var(--card-stroke); stroke-width: 1; }",
-    "    .accent { fill: var(--accent); }",
-    "    .repo-dot { fill: var(--repo-dot); }",
+    "    .divider { stroke: var(--card-stroke); stroke-width: 1; fill: none; }",
     "    .breakdown-track { fill: var(--breakdown-track); }",
     "    .breakdown-fill { fill: var(--breakdown-fill); }",
     "  </style>",
@@ -665,16 +716,14 @@ function renderOverviewSvg({ users, dayCount, repositories, activityTotals, tota
     `  <desc>${escapeXml(description)}</desc>`,
     `  <rect class="card" x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="18" ry="18" />`,
     `  ${chipLayout.svg}`,
-    `  <line class="divider" x1="${dividerX}" y1="${sectionTop}" x2="${dividerX}" y2="${height - 24}" />`,
-    `  <text class="fg" x="${leftX}" y="${sectionTop + 8}" font-size="18" font-weight="700">Activity overview</text>`,
-    `  <text class="fg" x="${leftX}" y="${sectionTop + 40}" font-size="16" font-weight="600">${escapeXml(repositorySummary)}</text>`,
-    `  <text class="fg-muted" x="${leftX}" y="${sectionTop + 64}" font-size="13">${escapeXml(accountSummary)}</text>`,
-    `  <text class="fg-muted" x="${leftX}" y="${sectionTop + 98}" font-size="13" font-weight="600">Top repositories</text>`,
-    `  ${repositoryList.svg}`,
-    `  <text class="fg-muted" x="${leftX}" y="${leftFooterY}" font-size="13">${escapeXml(`${totalContributions} calendar contributions tracked`)}</text>`,
-    `  <text class="fg" x="${rightX}" y="${sectionTop + 8}" font-size="18" font-weight="700">Contribution mix</text>`,
-    `  <text class="fg-muted" x="${rightX}" y="${sectionTop + 32}" font-size="13">${escapeXml(`${activityContributionCount} typed contributions captured by the GitHub API`)}</text>`,
-    `  ${renderActivityBreakdown(activityRows, rightX, rightRowsY, 42)}`,
+    `  <text class="fg" x="${padX}" y="${titleY}" font-size="17" font-weight="700">${escapeXml(title)}</text>`,
+    `  <text class="fg-muted" x="${width - padX}" y="${titleY}" font-size="12" text-anchor="end">${escapeXml(periodText)}</text>`,
+    `  <line class="divider" x1="${padX}" y1="${sep1Y}" x2="${width - padX}" y2="${sep1Y}" />`,
+    `  ${statsSvg}`,
+    `  <line class="divider" x1="${padX}" y1="${sep2Y}" x2="${width - padX}" y2="${sep2Y}" />`,
+    `  <text class="fg-muted" x="${padX}" y="${breakdownLabelY}" font-size="11" font-weight="600" letter-spacing="0.08em">ACTIVITY BREAKDOWN</text>`,
+    `  ${barsSvg}`,
+    `  ${reposSvgStr}`,
     "</svg>"
   ].join("\n");
 }
