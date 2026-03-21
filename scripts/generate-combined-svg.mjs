@@ -621,7 +621,6 @@ function renderOverviewSvg({ users, dayCount, repositories, activityTotals, tota
     if (!current || row.count > current.count) {
       return row;
     }
-
     return current;
   }, null);
 
