@@ -1,116 +1,42 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="860" height="592" viewBox="0 0 860 592" role="img" aria-label="Combined GitHub Activity Overview">
+<svg xmlns="http://www.w3.org/2000/svg" width="779" height="142" viewBox="0 0 779 142" role="img" aria-label="Combined GitHub Activity Overview">
   <style>
     svg {
-      --bg: #ffffff;
-      --card-stroke: #d0d7de;
-      --fg: #1f2328;
-      --fg-muted: #656d76;
-      --panel-bg: #f6f8fa;
-      --panel-stroke: #d8dee4;
-      --chip-bg: #f6f8fa;
-      --chip-stroke: #d8dee4;
-      --chip-dot: #1f883d;
-      --accent: #0969da;
-      --accent-soft: #ddf4ff;
-      --breakdown-track: #eaeef2;
-      --breakdown-fill: #1f883d;
-      --repo-dot: #1f6feb;
+      --fg: #24292f;
+      --fg-muted: #57606a;
+      --divider: #d0d7de;
+      --level-0: #ebedf0;
+      --level-1: #9be9a8;
+      --level-2: #40c463;
+      --level-3: #30a14e;
+      --level-4: #216e39;
     }
     @media (prefers-color-scheme: dark) {
       svg {
-        --bg: #0d1117;
-        --card-stroke: #30363d;
         --fg: #f0f6fc;
         --fg-muted: #8b949e;
-        --panel-bg: #161b22;
-        --panel-stroke: #30363d;
-        --chip-bg: #161b22;
-        --chip-stroke: #30363d;
-        --chip-dot: #39d353;
-        --accent: #58a6ff;
-        --accent-soft: rgba(56, 139, 253, 0.16);
-        --breakdown-track: #21262d;
-        --breakdown-fill: #39d353;
-        --repo-dot: #58a6ff;
+        --divider: #30363d;
+        --level-0: #161b22;
+        --level-1: #0e4429;
+        --level-2: #006d32;
+        --level-3: #26a641;
+        --level-4: #39d353;
       }
     }
     text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-    .card { fill: var(--bg); stroke: var(--card-stroke); }
-    .panel { fill: var(--panel-bg); stroke: var(--panel-stroke); }
-    .pill { fill: var(--panel-bg); stroke: var(--panel-stroke); }
-    .callout { fill: var(--accent-soft); stroke: var(--accent); }
     .fg { fill: var(--fg); }
     .fg-muted { fill: var(--fg-muted); }
-    .accent { fill: var(--accent); }
-    .chip { fill: var(--chip-bg); stroke: var(--chip-stroke); }
-    .chip-dot { fill: var(--chip-dot); }
-    .breakdown-track { fill: var(--breakdown-track); }
-    .breakdown-fill { fill: var(--breakdown-fill); }
-    .repo-dot { fill: var(--repo-dot); }
+    .divider { stroke: var(--divider); fill: none; }
+    .level-0 { fill: var(--level-0); }
+    .level-1 { fill: var(--level-1); }
+    .level-2 { fill: var(--level-2); }
+    .level-3 { fill: var(--level-3); }
+    .level-4 { fill: var(--level-4); }
   </style>
   <title>Combined GitHub Activity Overview</title>
-  <desc>Contributed to 26 repositories in the last 365 days. 848 typed contributions and 3070 calendar contributions across tnfssc, sharath-w, mykonos-ibiza.</desc>
-  <rect class="card" x="0.5" y="0.5" width="859" height="591" rx="18" ry="18" />
-  <g transform="translate(28 24)">
-  <rect class="chip" width="93" height="32" rx="10" ry="10" />
-  <circle class="chip-dot" cx="15" cy="16" r="5" />
-  <text class="fg" x="28" y="21" font-size="14" font-weight="600">@tnfssc</text>
-</g>
-<g transform="translate(131 24)">
-  <rect class="chip" width="118" height="32" rx="10" ry="10" />
-  <circle class="chip-dot" cx="15" cy="16" r="5" />
-  <text class="fg" x="28" y="21" font-size="14" font-weight="600">@sharath-w</text>
-</g>
-<g transform="translate(259 24)">
-  <rect class="chip" width="150" height="32" rx="10" ry="10" />
-  <circle class="chip-dot" cx="15" cy="16" r="5" />
-  <text class="fg" x="28" y="21" font-size="14" font-weight="600">@mykonos-ibiza</text>
-</g>
-  <text class="fg" x="28" y="86" font-size="19" font-weight="700">Combined GitHub Activity Overview</text>
-  <rect class="pill" x="710" y="67" width="122" height="28" rx="999" ry="999" />
-  <text class="fg-muted" x="771" y="86" font-size="12" font-weight="600" text-anchor="middle">365-day window</text>
-  <rect class="panel" x="28" y="104" width="804" height="112" rx="18" ry="18" />
-  <text class="fg-muted" x="52" y="132" font-size="12" font-weight="600" letter-spacing="0.08em">SUMMARY</text>
-  <text class="fg" x="52" y="162" font-size="21" font-weight="700">26 repositories were active in the last 365 days</text>
-  <text class="fg-muted" x="52" y="186" font-size="14">3,070 calendar contributions across 3 accounts</text>
-  <rect class="callout" x="612" y="122" width="196" height="68" rx="16" ry="16" />
-  <text class="accent" x="636" y="146" font-size="12" font-weight="600">TYPED CONTRIBUTIONS</text>
-  <text class="fg" x="636" y="176" font-size="30" font-weight="700">848</text>
-  <text class="fg-muted" x="52" y="202" font-size="13">Commits led the mix at 78%</text>
-  <rect class="panel" x="28" y="232" width="257.3333333333333" height="84" rx="16" ry="16" />
-<text class="fg-muted" x="48" y="257" font-size="12" font-weight="600">Calendar contributions</text>
-<text class="fg" x="48" y="286" font-size="26" font-weight="700">3,070</text>
-<text class="fg-muted" x="48" y="304" font-size="11">Tracked across 365-day window</text>
-<rect class="panel" x="301.3333333333333" y="232" width="257.3333333333333" height="84" rx="16" ry="16" />
-<text class="fg-muted" x="321.3333333333333" y="257" font-size="12" font-weight="600">Typed contributions</text>
-<text class="fg" x="321.3333333333333" y="286" font-size="26" font-weight="700">848</text>
-<text class="fg-muted" x="321.3333333333333" y="304" font-size="11">Commits, PRs, issues, and reviews</text>
-<rect class="panel" x="574.6666666666666" y="232" width="257.3333333333333" height="84" rx="16" ry="16" />
-<text class="fg-muted" x="594.6666666666666" y="257" font-size="12" font-weight="600">Repositories touched</text>
-<text class="fg" x="594.6666666666666" y="286" font-size="26" font-weight="700">26</text>
-<text class="fg-muted" x="594.6666666666666" y="304" font-size="11">Showing the top 3 below</text>
-  <rect class="panel" x="28" y="332" width="482" height="232" rx="18" ry="18" />
-  <text class="fg" x="52" y="362" font-size="17" font-weight="700">Contribution mix</text>
-  <text class="fg-muted" x="52" y="384" font-size="13">How typed contributions were distributed across the selected window.</text>
-  <text class="fg" x="52" y="414" font-size="14" font-weight="600">Commits</text>
-<text class="fg-muted" x="486" y="414" font-size="13" text-anchor="end">663 · 78%</text>
-<rect class="breakdown-track" x="52" y="424" width="434" height="8" rx="999" ry="999" />
-<rect class="breakdown-fill" x="52" y="424" width="339" height="8" rx="999" ry="999" />
-<text class="fg" x="52" y="452" font-size="14" font-weight="600">Pull requests</text>
-<text class="fg-muted" x="486" y="452" font-size="13" text-anchor="end">139 · 16%</text>
-<rect class="breakdown-track" x="52" y="462" width="434" height="8" rx="999" ry="999" />
-<rect class="breakdown-fill" x="52" y="462" width="69" height="8" rx="999" ry="999" />
-<text class="fg" x="52" y="490" font-size="14" font-weight="600">Issues</text>
-<text class="fg-muted" x="486" y="490" font-size="13" text-anchor="end">29 · 4%</text>
-<rect class="breakdown-track" x="52" y="500" width="434" height="8" rx="999" ry="999" />
-<rect class="breakdown-fill" x="52" y="500" width="17" height="8" rx="999" ry="999" />
-<text class="fg" x="52" y="528" font-size="14" font-weight="600">Code review</text>
-<text class="fg-muted" x="486" y="528" font-size="13" text-anchor="end">17 · 2%</text>
-<rect class="breakdown-track" x="52" y="538" width="434" height="8" rx="999" ry="999" />
-<rect class="breakdown-fill" x="52" y="538" width="9" height="8" rx="999" ry="999" />
-  <rect class="panel" x="526" y="332" width="306" height="232" rx="18" ry="18" />
-  <text class="fg" x="550" y="362" font-size="17" font-weight="700">Top repositories</text>
-  <text class="fg-muted" x="550" y="384" font-size="13">Where activity was most concentrated.</text>
-  <circle class="repo-dot" cx="555" cy="421" r="4" /><text class="accent" x="568" y="426" font-size="15" font-weight="600">kortix-ai/suna (556)</text><circle class="repo-dot" cx="555" cy="445" r="4" /><text class="accent" x="568" y="450" font-size="15" font-weight="600">tnfssc/sharath.boi.gg (77)</text><circle class="repo-dot" cx="555" cy="469" r="4" /><text class="accent" x="568" y="474" font-size="15" font-weight="600">tnfssc/skillz (51)</text><text class="fg-muted" x="550" y="510" font-size="13">and 23 other repositories</text>
-  <text class="fg-muted" x="550" y="540" font-size="12">Showing 3 of 26 repositories</text>
+  <desc>Weekly activity rhythm for alice, bob over 365 days. 62 commits, 18 PRs, 13 issues, 13 reviews. 102 total contributions.</desc>
+  <text class="fg-muted" x="20" y="14" font-size="10">@alice · @bob</text>
+  <text class="fg-muted" x="759" y="14" font-size="10" text-anchor="end">365-day window</text>
+  <rect class="level-0" x="20" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-03-16: 0 contributions</title></rect><rect class="level-0" x="34" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-03-23: 0 contributions</title></rect><rect class="level-0" x="48" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-03-30: 0 contributions</title></rect><text class="fg-muted" x="48" y="102" font-size="10">Apr</text><rect class="level-0" x="62" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-04-06: 0 contributions</title></rect><rect class="level-0" x="76" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-04-13: 0 contributions</title></rect><rect class="level-0" x="90" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-04-20: 0 contributions</title></rect><rect class="level-0" x="104" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-04-27: 0 contributions</title></rect><text class="fg-muted" x="104" y="102" font-size="10">May</text><rect class="level-0" x="118" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-05-04: 0 contributions</title></rect><rect class="level-0" x="132" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-05-11: 0 contributions</title></rect><rect class="level-0" x="146" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-05-18: 0 contributions</title></rect><rect class="level-0" x="160" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-05-25: 0 contributions</title></rect><rect class="level-0" x="174" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-06-01: 0 contributions</title></rect><text class="fg-muted" x="174" y="102" font-size="10">Jun</text><rect class="level-0" x="188" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-06-08: 0 contributions</title></rect><rect class="level-0" x="202" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-06-15: 0 contributions</title></rect><rect class="level-0" x="216" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-06-22: 0 contributions</title></rect><rect class="level-0" x="230" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-06-29: 0 contributions</title></rect><text class="fg-muted" x="230" y="102" font-size="10">Jul</text><rect class="level-0" x="244" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-07-06: 0 contributions</title></rect><rect class="level-0" x="258" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-07-13: 0 contributions</title></rect><rect class="level-0" x="272" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-07-20: 0 contributions</title></rect><rect class="level-0" x="286" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-07-27: 0 contributions</title></rect><text class="fg-muted" x="286" y="102" font-size="10">Aug</text><rect class="level-0" x="300" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-08-03: 0 contributions</title></rect><rect class="level-0" x="314" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-08-10: 0 contributions</title></rect><rect class="level-0" x="328" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-08-17: 0 contributions</title></rect><rect class="level-0" x="342" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-08-24: 0 contributions</title></rect><rect class="level-0" x="356" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-08-31: 0 contributions</title></rect><text class="fg-muted" x="356" y="102" font-size="10">Sep</text><rect class="level-0" x="370" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-09-07: 0 contributions</title></rect><rect class="level-0" x="384" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-09-14: 0 contributions</title></rect><rect class="level-0" x="398" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-09-21: 0 contributions</title></rect><rect class="level-0" x="412" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-09-28: 0 contributions</title></rect><text class="fg-muted" x="412" y="102" font-size="10">Oct</text><rect class="level-0" x="426" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-10-05: 0 contributions</title></rect><rect class="level-0" x="440" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-10-12: 0 contributions</title></rect><rect class="level-0" x="454" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-10-19: 0 contributions</title></rect><rect class="level-0" x="468" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-10-26: 0 contributions</title></rect><text class="fg-muted" x="468" y="102" font-size="10">Nov</text><rect class="level-0" x="482" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-11-02: 0 contributions</title></rect><rect class="level-0" x="496" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-11-09: 0 contributions</title></rect><rect class="level-0" x="510" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-11-16: 0 contributions</title></rect><rect class="level-0" x="524" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-11-23: 0 contributions</title></rect><rect class="level-0" x="538" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-11-30: 0 contributions</title></rect><text class="fg-muted" x="538" y="102" font-size="10">Dec</text><rect class="level-0" x="552" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-12-07: 0 contributions</title></rect><rect class="level-0" x="566" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-12-14: 0 contributions</title></rect><rect class="level-0" x="580" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-12-21: 0 contributions</title></rect><rect class="level-0" x="594" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2025-12-28: 0 contributions</title></rect><text class="fg-muted" x="594" y="102" font-size="10">Jan</text><rect class="level-3" x="608" y="53" width="11" height="35" rx="1" ry="1"><title>Week of 2026-01-04: 14 contributions</title></rect><rect class="level-3" x="622" y="53" width="11" height="35" rx="1" ry="1"><title>Week of 2026-01-11: 14 contributions</title></rect><rect class="level-2" x="636" y="63" width="11" height="25" rx="1" ry="1"><title>Week of 2026-01-18: 10 contributions</title></rect><rect class="level-1" x="650" y="83" width="11" height="5" rx="1" ry="1"><title>Week of 2026-01-25: 2 contributions</title></rect><rect class="level-3" x="664" y="58" width="11" height="30" rx="1" ry="1"><title>Week of 2026-02-01: 12 contributions</title></rect><text class="fg-muted" x="664" y="102" font-size="10">Feb</text><rect class="level-1" x="678" y="70" width="11" height="18" rx="1" ry="1"><title>Week of 2026-02-08: 7 contributions</title></rect><rect class="level-2" x="692" y="63" width="11" height="25" rx="1" ry="1"><title>Week of 2026-02-15: 10 contributions</title></rect><rect class="level-1" x="706" y="65" width="11" height="23" rx="1" ry="1"><title>Week of 2026-02-22: 9 contributions</title></rect><rect class="level-4" x="720" y="28" width="11" height="60" rx="1" ry="1"><title>Week of 2026-03-01: 24 contributions</title></rect><text class="fg-muted" x="720" y="102" font-size="10">Mar</text><rect class="level-0" x="734" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2026-03-08: 0 contributions</title></rect><rect class="level-0" x="748" y="86" width="11" height="2" rx="1" ry="1"><title>Week of 2026-03-15: 0 contributions</title></rect>
+  <line class="divider" x1="20" y1="112" x2="759" y2="112" stroke-width="1" />
+  <text x="20" y="128" font-size="11"><tspan class="fg" font-weight="600">62</tspan><tspan class="fg-muted"> commits</tspan><tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">18</tspan><tspan class="fg-muted"> PRs</tspan><tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">13</tspan><tspan class="fg-muted"> issues</tspan><tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">13</tspan><tspan class="fg-muted"> reviews</tspan><tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">102</tspan><tspan class="fg-muted"> total</tspan></text>
 </svg>

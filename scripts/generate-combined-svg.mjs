@@ -483,304 +483,125 @@ function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, 
   ].join("\n");
 }
 
-function buildActivityPercentages(activityTotals) {
-  const counts = ACTIVITY_SECTIONS.map((section) => activityTotals[section.key]);
-  const total = counts.reduce((sum, count) => sum + count, 0);
-  if (total === 0) {
-    return ACTIVITY_SECTIONS.reduce((result, section) => ({ ...result, [section.key]: 0 }), {});
-  }
-
-  const exact = counts.map((count) => (count / total) * 100);
-  const roundedDown = exact.map((value) => Math.floor(value));
-  let remaining = 100 - roundedDown.reduce((sum, value) => sum + value, 0);
-
-  const order = exact
-    .map((value, index) => ({ index, fraction: value - roundedDown[index] }))
-    .sort((left, right) => right.fraction - left.fraction || left.index - right.index);
-
-  for (let index = 0; index < remaining; index += 1) {
-    roundedDown[order[index].index] += 1;
-  }
-
-  return ACTIVITY_SECTIONS.reduce((result, section, index) => {
-    result[section.key] = roundedDown[index];
-    return result;
-  }, {});
-}
-
-function formatActivitySummary(activityTotals) {
-  const percentages = buildActivityPercentages(activityTotals);
-  const total = sumActivityTotals(activityTotals);
-
-  return ACTIVITY_SECTIONS.map((section) => ({
-    key: section.key,
-    label: section.label,
-    count: activityTotals[section.key],
-    percentage: percentages[section.key],
-    total
-  }));
-}
-
-function renderUserChips(users, startX, startY, maxWidth) {
-  const chipHeight = 32;
-  const gapX = 10;
-  const gapY = 10;
-  let x = startX;
-  let y = startY;
-
-  const chips = users.map((login) => {
-    const label = `@${login}`;
-    const chipWidth = Math.max(80, Math.ceil(estimateTextWidth(label, 14) + 36));
-    if (x !== startX && x + chipWidth > maxWidth) {
-      x = startX;
-      y += chipHeight + gapY;
+function computeCurrentStreak(days) {
+  let streak = 0;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i].count > 0) {
+      streak++;
+    } else if (streak > 0) {
+      break;
     }
-
-    const svg = [
-      `<g transform="translate(${x} ${y})">`,
-      `  <rect class="chip" width="${chipWidth}" height="${chipHeight}" rx="10" ry="10" />`,
-      "  <circle class=\"chip-dot\" cx=\"15\" cy=\"16\" r=\"5\" />",
-      `  <text class="fg" x="28" y="21" font-size="14" font-weight="600">${escapeXml(label)}</text>`,
-      "</g>"
-    ].join("\n");
-
-    x += chipWidth + gapX;
-    return svg;
-  }).join("\n");
-
-  return {
-    svg: chips,
-    height: y - startY + chipHeight
-  };
-}
-
-function renderRepositoryList(repositories, x, y, maxCount) {
-  if (repositories.length === 0) {
-    return {
-      svg: `<text class="fg-muted" x="${x}" y="${y}" font-size="14">No repository activity found in the selected window.</text>`,
-      height: 24
-    };
   }
-
-  const lines = repositories.slice(0, maxCount).map((repository, index) => {
-    const lineY = y + index * 24;
-    const label = `${truncateText(repository.nameWithOwner, 34)} (${repository.totalCount})`;
-    return [
-      `<circle class="repo-dot" cx="${x + 5}" cy="${lineY - 5}" r="4" />`,
-      `<text class="accent" x="${x + 18}" y="${lineY}" font-size="15" font-weight="600">${escapeXml(label)}</text>`
-    ].join("");
-  }).join("");
-
-  const remainingCount = repositories.length - Math.min(repositories.length, maxCount);
-  const overflow = remainingCount > 0
-    ? `<text class="fg-muted" x="${x}" y="${y + Math.min(repositories.length, maxCount) * 24 + 12}" font-size="13">and ${remainingCount} other repositor${remainingCount === 1 ? "y" : "ies"}</text>`
-    : "";
-
-  return {
-    svg: `${lines}${overflow}`,
-    height: Math.min(repositories.length, maxCount) * 24 + (remainingCount > 0 ? 24 : 0)
-  };
+  return streak;
 }
 
-function renderActivityBreakdown(rows, x, y, rowHeight) {
-  return rows.map((row, index) => {
-    const rowY = y + index * rowHeight;
-    const trackY = rowY + 10;
-    const trackWidth = 164;
-    const fillWidth = Math.max(row.percentage === 0 ? 0 : 6, Math.round(trackWidth * (row.percentage / 100)));
-
-    return [
-      `<text class="fg" x="${x}" y="${rowY}" font-size="14" font-weight="600">${escapeXml(row.label)}</text>`,
-      `<text class="fg-muted" x="${x + 222}" y="${rowY}" font-size="13" text-anchor="end">${row.percentage}%</text>`,
-      `<text class="fg-muted" x="${x + 232}" y="${rowY}" font-size="13">${row.count}</text>`,
-      `<rect class="breakdown-track" x="${x}" y="${trackY}" width="${trackWidth}" height="8" rx="999" ry="999" />`,
-      `<rect class="breakdown-fill" x="${x}" y="${trackY}" width="${fillWidth}" height="8" rx="999" ry="999" />`
-    ].join("");
-  }).join("");
-}
-
-function renderOverviewSvg({ users, dayCount, repositories, activityTotals, totalContributions, title, maxOverviewRepos }) {
-  const width = 860;
-  const padX = 28;
-  const contentWidth = width - padX * 2;
-  const sectionGap = 16;
-  const tileGap = 16;
-  const tileHeight = 84;
-  const lowerPanelGap = 16;
-  const rightPanelWidth = 306;
-  const leftPanelWidth = contentWidth - rightPanelWidth - lowerPanelGap;
-
-  const chipLayout = renderUserChips(users, padX, 24, width - padX);
-  const chipBottom = 24 + chipLayout.height;
-
-  const activityRows = formatActivitySummary(activityTotals);
-  const activityContributionCount = activityRows[0]?.total || 0;
-  const repositoryCount = repositories.length;
-  const accountCount = users.length;
-  const dominantActivity = activityRows.reduce((current, row) => {
-    if (!current || row.count > current.count) {
-      return row;
-    }
-    return current;
-  }, null);
-
-  const periodText = `${formatNumber(dayCount)}-day window`;
-  const periodBadgeWidth = Math.max(116, Math.ceil(estimateTextWidth(periodText, 12) + 24));
-
-  const titleY = chipBottom + 30;
-  const summaryY = titleY + 18;
-  const summaryHeight = 112;
-  const tilesY = summaryY + summaryHeight + sectionGap;
-  const tileWidth = (contentWidth - tileGap * 2) / 3;
-  const lowerPanelsY = tilesY + tileHeight + sectionGap;
-  const mixPanelHeight = 232;
-  const repoListStartY = lowerPanelsY + 94;
-  const repoList = renderRepositoryList(repositories, padX + leftPanelWidth + lowerPanelGap + 24, repoListStartY, maxOverviewRepos);
-  const repoPanelHeight = Math.max(204, 118 + repoList.height);
-  const lowerPanelHeight = Math.max(mixPanelHeight, repoPanelHeight);
-  const height = lowerPanelsY + lowerPanelHeight + 28;
-
-  const repositorySummary = repositoryCount === 0
-    ? `No repositories contributed to in the last ${dayCount} days`
-    : `Contributed to ${repositoryCount} repositor${repositoryCount === 1 ? "y" : "ies"} in the last ${dayCount} days`;
-  const description = `${repositorySummary}. ${activityContributionCount} typed contributions and ${totalContributions} calendar contributions across ${users.join(", ")}.`;
-
-  const summaryHeadline = repositoryCount === 0
-    ? "No repository activity recorded in the selected window"
-    : `${formatNumber(repositoryCount)} repositor${repositoryCount === 1 ? "y was" : "ies were"} active in the last ${formatNumber(dayCount)} days`;
-  const summaryDetails = `${formatNumber(totalContributions)} calendar contributions across ${formatNumber(accountCount)} account${accountCount === 1 ? "" : "s"}`;
-  const dominantActivityLabel = activityContributionCount === 0 || !dominantActivity
-    ? "No typed activity captured"
-    : `${dominantActivity.label} led the mix at ${dominantActivity.percentage}%`;
-
-  const statItems = [
-    {
-      value: formatNumber(totalContributions),
-      label: "Calendar contributions",
-      note: `Tracked across ${periodText.toLowerCase()}`
-    },
-    {
-      value: formatNumber(activityContributionCount),
-      label: "Typed contributions",
-      note: "Commits, PRs, issues, and reviews"
-    },
-    {
-      value: formatNumber(repositoryCount),
-      label: "Repositories touched",
-      note: repositoryCount === 0
-        ? "No repositories captured"
-        : `Showing the top ${Math.min(repositoryCount, maxOverviewRepos)} below`
-    }
+function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, title }) {
+  const weeklyTotals = weeks.map((week) => week.reduce((sum, d) => sum + d.count, 0));
+  const nonZeroWeekly = weeklyTotals.filter((t) => t > 0).sort((a, b) => a - b);
+  const weekThresholds = [
+    pickThreshold(nonZeroWeekly, 0.25),
+    pickThreshold(nonZeroWeekly, 0.5),
+    pickThreshold(nonZeroWeekly, 0.75)
   ];
-  const statsSvg = statItems.map((item, i) => {
-    const x = padX + i * (tileWidth + tileGap);
-    return [
-      `<rect class="panel" x="${x}" y="${tilesY}" width="${tileWidth}" height="${tileHeight}" rx="16" ry="16" />`,
-      `<text class="fg-muted" x="${x + 20}" y="${tilesY + 25}" font-size="12" font-weight="600">${escapeXml(item.label)}</text>`,
-      `<text class="fg" x="${x + 20}" y="${tilesY + 54}" font-size="26" font-weight="700">${escapeXml(item.value)}</text>`,
-      `<text class="fg-muted" x="${x + 20}" y="${tilesY + 72}" font-size="11">${escapeXml(item.note)}</text>`
-    ].join("\n");
-  }).join("\n");
+  const maxWeekly = Math.max(...weeklyTotals, 1);
+  const currentStreak = computeCurrentStreak(days);
 
-  const mixPanelX = padX;
-  const mixPanelInnerX = mixPanelX + 24;
-  const mixPanelRight = mixPanelX + leftPanelWidth - 24;
-  const mixTrackWidth = leftPanelWidth - 48;
-  const mixRowsStart = lowerPanelsY + 82;
-  const barRowHeight = 38;
-  const barsSvg = activityRows.map((row, i) => {
-    const rowY = mixRowsStart + i * barRowHeight;
-    const fillWidth = Math.max(row.percentage === 0 ? 0 : 6, Math.round(mixTrackWidth * (row.percentage / 100)));
-    return [
-      `<text class="fg" x="${mixPanelInnerX}" y="${rowY}" font-size="14" font-weight="600">${escapeXml(row.label)}</text>`,
-      `<text class="fg-muted" x="${mixPanelRight}" y="${rowY}" font-size="13" text-anchor="end">${escapeXml(`${formatNumber(row.count)} · ${row.percentage}%`)}</text>`,
-      `<rect class="breakdown-track" x="${mixPanelInnerX}" y="${rowY + 10}" width="${mixTrackWidth}" height="8" rx="999" ry="999" />`,
-      `<rect class="breakdown-fill" x="${mixPanelInnerX}" y="${rowY + 10}" width="${fillWidth}" height="8" rx="999" ry="999" />`
-    ].join("\n");
-  }).join("\n");
+  const barWidth = 11;
+  const barGap = 3;
+  const barStep = barWidth + barGap;
+  const maxBarH = 60;
+  const padX = 20;
+  const numWeeks = weeks.length;
 
-  const repoPanelX = padX + leftPanelWidth + lowerPanelGap;
-  const repoPanelFooterY = lowerPanelsY + lowerPanelHeight - 24;
-  const repoFooterText = repositoryCount === 0
-    ? `No repository activity in the last ${dayCount} days`
-    : `Showing ${Math.min(repositoryCount, maxOverviewRepos)} of ${repositoryCount} repositories`;
+  const width = padX + numWeeks * barStep - barGap + padX;
+
+  const headerY = 14;
+  const barsBottomY = headerY + 14 + maxBarH;
+  const monthLabelY = barsBottomY + 14;
+  const dividerY = monthLabelY + 10;
+  const footerY = dividerY + 16;
+  const height = footerY + 14;
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  let lastMonth = -1;
+  const barsAndLabels = weeks.map((week, wi) => {
+    const total = weeklyTotals[wi];
+    const level = colorForCount(total, weekThresholds);
+    const barH = total === 0 ? 2 : Math.max(3, Math.round(maxBarH * total / maxWeekly));
+    const x = padX + wi * barStep;
+    const y = barsBottomY - barH;
+    const titleText = `Week of ${week[0]?.date ?? "unknown"}: ${total} contribution${total === 1 ? "" : "s"}`;
+    const bar = `<rect class="level-${level}" x="${x}" y="${y}" width="${barWidth}" height="${barH}" rx="1" ry="1"><title>${escapeXml(titleText)}</title></rect>`;
+
+    const firstOfMonth = week.find((d) => d.date.slice(8) === "01");
+    let monthLabel = "";
+    if (firstOfMonth) {
+      const monthIndex = Number.parseInt(firstOfMonth.date.slice(5, 7), 10) - 1;
+      if (monthIndex !== lastMonth) {
+        lastMonth = monthIndex;
+        monthLabel = `<text class="fg-muted" x="${x}" y="${monthLabelY}" font-size="10">${monthNames[monthIndex]}</text>`;
+      }
+    }
+
+    return bar + monthLabel;
+  }).join("");
+
+  const usersText = users.map((u) => `@${u}`).join(" · ");
+  const periodText = `${formatNumber(dayCount)}-day window`;
+  const streakSuffix = currentStreak > 1 ? `  ·  ${formatNumber(currentStreak)}-day streak` : "";
+
+  const footerTspans = [
+    `<tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityTotals.commits))}</tspan><tspan class="fg-muted"> commits</tspan>`,
+    `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityTotals.pullRequests))}</tspan><tspan class="fg-muted"> PRs</tspan>`,
+    `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityTotals.issues))}</tspan><tspan class="fg-muted"> issues</tspan>`,
+    `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(activityTotals.reviews))}</tspan><tspan class="fg-muted"> reviews</tspan>`,
+    `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(totalContributions))}</tspan><tspan class="fg-muted"> total${escapeXml(streakSuffix)}</tspan>`
+  ].join("");
+
+  const description = `Weekly activity rhythm for ${users.join(", ")} over ${dayCount} days. ${formatNumber(activityTotals.commits)} commits, ${formatNumber(activityTotals.pullRequests)} PRs, ${formatNumber(activityTotals.issues)} issues, ${formatNumber(activityTotals.reviews)} reviews. ${formatNumber(totalContributions)} total contributions.`;
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
     "  <style>",
     "    svg {",
-    "      --bg: #ffffff;",
-    "      --card-stroke: #d0d7de;",
-    "      --fg: #1f2328;",
-    "      --fg-muted: #656d76;",
-    "      --panel-bg: #f6f8fa;",
-    "      --panel-stroke: #d8dee4;",
-    "      --chip-bg: #f6f8fa;",
-    "      --chip-stroke: #d8dee4;",
-    "      --chip-dot: #1f883d;",
-    "      --accent: #0969da;",
-    "      --accent-soft: #ddf4ff;",
-    "      --breakdown-track: #eaeef2;",
-    "      --breakdown-fill: #1f883d;",
-    "      --repo-dot: #1f6feb;",
+    "      --fg: #24292f;",
+    "      --fg-muted: #57606a;",
+    "      --divider: #d0d7de;",
+    "      --level-0: #ebedf0;",
+    "      --level-1: #9be9a8;",
+    "      --level-2: #40c463;",
+    "      --level-3: #30a14e;",
+    "      --level-4: #216e39;",
     "    }",
     "    @media (prefers-color-scheme: dark) {",
     "      svg {",
-    "        --bg: #0d1117;",
-    "        --card-stroke: #30363d;",
     "        --fg: #f0f6fc;",
     "        --fg-muted: #8b949e;",
-    "        --panel-bg: #161b22;",
-    "        --panel-stroke: #30363d;",
-    "        --chip-bg: #161b22;",
-    "        --chip-stroke: #30363d;",
-    "        --chip-dot: #39d353;",
-    "        --accent: #58a6ff;",
-    "        --accent-soft: rgba(56, 139, 253, 0.16);",
-    "        --breakdown-track: #21262d;",
-    "        --breakdown-fill: #39d353;",
-    "        --repo-dot: #58a6ff;",
+    "        --divider: #30363d;",
+    "        --level-0: #161b22;",
+    "        --level-1: #0e4429;",
+    "        --level-2: #006d32;",
+    "        --level-3: #26a641;",
+    "        --level-4: #39d353;",
     "      }",
     "    }",
     "    text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }",
-    "    .card { fill: var(--bg); stroke: var(--card-stroke); }",
-    "    .panel { fill: var(--panel-bg); stroke: var(--panel-stroke); }",
-    "    .pill { fill: var(--panel-bg); stroke: var(--panel-stroke); }",
-    "    .callout { fill: var(--accent-soft); stroke: var(--accent); }",
     "    .fg { fill: var(--fg); }",
     "    .fg-muted { fill: var(--fg-muted); }",
-    "    .accent { fill: var(--accent); }",
-    "    .chip { fill: var(--chip-bg); stroke: var(--chip-stroke); }",
-    "    .chip-dot { fill: var(--chip-dot); }",
-    "    .breakdown-track { fill: var(--breakdown-track); }",
-    "    .breakdown-fill { fill: var(--breakdown-fill); }",
-    "    .repo-dot { fill: var(--repo-dot); }",
+    "    .divider { stroke: var(--divider); fill: none; }",
+    "    .level-0 { fill: var(--level-0); }",
+    "    .level-1 { fill: var(--level-1); }",
+    "    .level-2 { fill: var(--level-2); }",
+    "    .level-3 { fill: var(--level-3); }",
+    "    .level-4 { fill: var(--level-4); }",
     "  </style>",
     `  <title>${escapeXml(title)}</title>`,
     `  <desc>${escapeXml(description)}</desc>`,
-    `  <rect class="card" x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="18" ry="18" />`,
-    `  ${chipLayout.svg}`,
-    `  <text class="fg" x="${padX}" y="${titleY}" font-size="19" font-weight="700">${escapeXml(title)}</text>`,
-    `  <rect class="pill" x="${width - padX - periodBadgeWidth}" y="${titleY - 19}" width="${periodBadgeWidth}" height="28" rx="999" ry="999" />`,
-    `  <text class="fg-muted" x="${width - padX - periodBadgeWidth / 2}" y="${titleY}" font-size="12" font-weight="600" text-anchor="middle">${escapeXml(periodText)}</text>`,
-    `  <rect class="panel" x="${padX}" y="${summaryY}" width="${contentWidth}" height="${summaryHeight}" rx="18" ry="18" />`,
-    `  <text class="fg-muted" x="${padX + 24}" y="${summaryY + 28}" font-size="12" font-weight="600" letter-spacing="0.08em">SUMMARY</text>`,
-    `  <text class="fg" x="${padX + 24}" y="${summaryY + 58}" font-size="21" font-weight="700">${escapeXml(summaryHeadline)}</text>`,
-    `  <text class="fg-muted" x="${padX + 24}" y="${summaryY + 82}" font-size="14">${escapeXml(summaryDetails)}</text>`,
-    `  <rect class="callout" x="${width - padX - 220}" y="${summaryY + 18}" width="196" height="68" rx="16" ry="16" />`,
-    `  <text class="accent" x="${width - padX - 196}" y="${summaryY + 42}" font-size="12" font-weight="600">TYPED CONTRIBUTIONS</text>`,
-    `  <text class="fg" x="${width - padX - 196}" y="${summaryY + 72}" font-size="30" font-weight="700">${escapeXml(formatNumber(activityContributionCount))}</text>`,
-    `  <text class="fg-muted" x="${padX + 24}" y="${summaryY + 98}" font-size="13">${escapeXml(dominantActivityLabel)}</text>`,
-    `  ${statsSvg}`,
-    `  <rect class="panel" x="${mixPanelX}" y="${lowerPanelsY}" width="${leftPanelWidth}" height="${lowerPanelHeight}" rx="18" ry="18" />`,
-    `  <text class="fg" x="${mixPanelInnerX}" y="${lowerPanelsY + 30}" font-size="17" font-weight="700">Contribution mix</text>`,
-    `  <text class="fg-muted" x="${mixPanelInnerX}" y="${lowerPanelsY + 52}" font-size="13">How typed contributions were distributed across the selected window.</text>`,
-    `  ${barsSvg}`,
-    `  <rect class="panel" x="${repoPanelX}" y="${lowerPanelsY}" width="${rightPanelWidth}" height="${lowerPanelHeight}" rx="18" ry="18" />`,
-    `  <text class="fg" x="${repoPanelX + 24}" y="${lowerPanelsY + 30}" font-size="17" font-weight="700">Top repositories</text>`,
-    `  <text class="fg-muted" x="${repoPanelX + 24}" y="${lowerPanelsY + 52}" font-size="13">Where activity was most concentrated.</text>`,
-    `  ${repoList.svg}`,
-    `  <text class="fg-muted" x="${repoPanelX + 24}" y="${repoPanelFooterY}" font-size="12">${escapeXml(repoFooterText)}</text>`,
+    `  <text class="fg-muted" x="${padX}" y="${headerY}" font-size="10">${escapeXml(usersText)}</text>`,
+    `  <text class="fg-muted" x="${width - padX}" y="${headerY}" font-size="10" text-anchor="end">${escapeXml(periodText)}</text>`,
+    `  ${barsAndLabels}`,
+    `  <line class="divider" x1="${padX}" y1="${dividerY}" x2="${width - padX}" y2="${dividerY}" stroke-width="1" />`,
+    `  <text x="${padX}" y="${footerY}" font-size="11">${footerTspans}</text>`,
     "</svg>"
   ].join("\n");
 }
@@ -849,6 +670,8 @@ async function main() {
   const overviewSvg = renderOverviewSvg({
     users,
     dayCount,
+    days: renderedDays,
+    weeks,
     repositories: sortedRepositories,
     activityTotals,
     totalContributions,
