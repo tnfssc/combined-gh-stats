@@ -20,6 +20,7 @@ const CONTRIBUTIONS_QUERY = `
   query CombinedContributionStats($login: String!, $from: DateTime!, $to: DateTime!, $maxRepositories: Int!) {
     user(login: $login) {
       contributionsCollection(from: $from, to: $to) {
+        restrictedContributionsCount
         contributionCalendar {
           weeks {
             contributionDays {
@@ -324,8 +325,9 @@ function normalizeMockContributionStats(entry, login, from, to) {
   const fallbackTotals = { commits: days.reduce((sum, day) => sum + day.contributionCount, 0) };
   const activityTotals = createActivityTotals(hasExtendedShape ? (entry.activity || fallbackTotals) : fallbackTotals);
   const repositories = normalizeRepositoryEntries(hasExtendedShape ? entry.repositories : []);
+  const restrictedContributions = Number(hasExtendedShape ? (entry.restrictedContributions ?? entry.privateContributions) : 0) || 0;
 
-  return { days, activityTotals, repositories };
+  return { days, activityTotals, repositories, restrictedContributions };
 }
 
 async function fetchContributionStats(login, from, to, maxRepositories) {
@@ -378,6 +380,7 @@ async function fetchContributionStats(login, from, to, maxRepositories) {
       pullRequests: collection.totalPullRequestContributions,
       reviews: collection.totalPullRequestReviewContributions
     }),
+    restrictedContributions: Number(collection.restrictedContributionsCount) || 0,
     repositories: repositoriesFromContributionGroups([
       collection.commitContributionsByRepository,
       collection.issueContributionsByRepository,
@@ -495,7 +498,7 @@ function computeCurrentStreak(days) {
   return streak;
 }
 
-function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, title }) {
+function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, restrictedContributions, title }) {
   const weeklyTotals = weeks.map((week) => week.reduce((sum, d) => sum + d.count, 0));
   const nonZeroWeekly = weeklyTotals.filter((t) => t > 0).sort((a, b) => a - b);
   const weekThresholds = [
@@ -520,7 +523,11 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
   const monthLabelY = barsBottomY + 14;
   const dividerY = monthLabelY + 10;
   const footerY = dividerY + 16;
-  const height = footerY + 14;
+  const restrictedNote = restrictedContributions > 0
+    ? `GitHub reports ${formatNumber(restrictedContributions)} private contribution${restrictedContributions === 1 ? "" : "s"} in this window, so commits, PRs, issues, and reviews may not add up to the total.`
+    : "";
+  const restrictedNoteY = footerY + 11;
+  const height = restrictedNote ? restrictedNoteY + 8 : footerY + 14;
 
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   let lastMonth = -1;
@@ -558,7 +565,7 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
     `<tspan class="fg-muted">  ·  </tspan><tspan class="fg" font-weight="600">${escapeXml(formatNumber(totalContributions))}</tspan><tspan class="fg-muted"> total${escapeXml(streakSuffix)}</tspan>`
   ].join("");
 
-  const description = `Weekly activity rhythm for ${users.join(", ")} over ${dayCount} days. ${formatNumber(activityTotals.commits)} commits, ${formatNumber(activityTotals.pullRequests)} PRs, ${formatNumber(activityTotals.issues)} issues, ${formatNumber(activityTotals.reviews)} reviews. ${formatNumber(totalContributions)} total contributions.`;
+  const description = `Weekly activity rhythm for ${users.join(", ")} over ${dayCount} days. ${formatNumber(activityTotals.commits)} commits, ${formatNumber(activityTotals.pullRequests)} PRs, ${formatNumber(activityTotals.issues)} issues, ${formatNumber(activityTotals.reviews)} reviews. ${formatNumber(totalContributions)} total contributions.${restrictedNote ? ` ${restrictedNote}` : ""}`;
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
@@ -602,6 +609,7 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
     `  ${barsAndLabels}`,
     `  <line class="divider" x1="${padX}" y1="${dividerY}" x2="${width - padX}" y2="${dividerY}" stroke-width="1" />`,
     `  <text x="${padX}" y="${footerY}" font-size="11">${footerTspans}</text>`,
+    restrictedNote ? `  <text class="fg-muted" x="${padX}" y="${restrictedNoteY}" font-size="9">${escapeXml(restrictedNote)}</text>` : "",
     "</svg>"
   ].join("\n");
 }
@@ -630,6 +638,7 @@ async function main() {
   const totalsByDate = new Map();
   const activityTotals = { ...EMPTY_ACTIVITY_TOTALS };
   const repositories = new Map();
+  let restrictedContributions = 0;
 
   for (const login of users) {
     const stats = await fetchContributionStats(login, start, end, maxRepositories);
@@ -640,6 +649,7 @@ async function main() {
 
     mergeActivityTotals(activityTotals, stats.activityTotals);
     mergeRepositoryTotals(repositories, stats.repositories);
+    restrictedContributions += stats.restrictedContributions || 0;
   }
 
   const gridStart = addDays(startDate, -startDate.getUTCDay());
@@ -675,6 +685,7 @@ async function main() {
     repositories: sortedRepositories,
     activityTotals,
     totalContributions,
+    restrictedContributions,
     title: overviewTitle,
     maxOverviewRepos
   });

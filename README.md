@@ -69,6 +69,8 @@ For GitHub Actions, add matching repository secrets such as `GITHUB_TOKEN_ACCOUN
 
 Usernames are normalized to uppercase with non-alphanumeric characters replaced by underscores when building the environment variable name.
 
+When GitHub reports private contributions in the selected window, the activity overview adds a note explaining that GitHub does not break those contributions down into commits, PRs, issues, and reviews.
+
 ## Customization
 
 - `OUTPUT_FILE` changes the destination SVG path
