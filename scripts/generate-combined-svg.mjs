@@ -602,78 +602,108 @@ function renderActivityBreakdown(rows, x, y, rowHeight) {
 function renderOverviewSvg({ users, dayCount, repositories, activityTotals, totalContributions, title, maxOverviewRepos }) {
   const width = 860;
   const padX = 28;
+  const contentWidth = width - padX * 2;
+  const sectionGap = 16;
+  const tileGap = 16;
+  const tileHeight = 84;
+  const lowerPanelGap = 16;
+  const rightPanelWidth = 306;
+  const leftPanelWidth = contentWidth - rightPanelWidth - lowerPanelGap;
 
-  const chipLayout = renderUserChips(users, padX, 24, width - padX * 2);
+  const chipLayout = renderUserChips(users, padX, 24, width - padX);
   const chipBottom = 24 + chipLayout.height;
 
   const activityRows = formatActivitySummary(activityTotals);
   const activityContributionCount = activityRows[0]?.total || 0;
   const repositoryCount = repositories.length;
+  const accountCount = users.length;
+  const dominantActivity = activityRows.reduce((current, row) => {
+    if (!current || row.count > current.count) {
+      return row;
+    }
+    return current;
+  }, null);
 
-  // Vertical layout: chips → title row → separator → stats → separator → breakdown label → bars → repos
-  const titleY = chipBottom + 24;
-  const sep1Y = titleY + 18;
-  const statsNumY = sep1Y + 36;
-  const statsLabelY = statsNumY + 18;
-  const sep2Y = statsLabelY + 22;
-  const breakdownLabelY = sep2Y + 22;
-  const barsStart = breakdownLabelY + 18;
-  const barRowHeight = 44;
-  const reposBaselineY = barsStart + activityRows.length * barRowHeight + 22;
-  const height = reposBaselineY + 28;
+  const periodText = `${formatNumber(dayCount)}-day window`;
+  const periodBadgeWidth = Math.max(116, Math.ceil(estimateTextWidth(periodText, 12) + 24));
+
+  const titleY = chipBottom + 30;
+  const summaryY = titleY + 18;
+  const summaryHeight = 112;
+  const tilesY = summaryY + summaryHeight + sectionGap;
+  const tileWidth = (contentWidth - tileGap * 2) / 3;
+  const lowerPanelsY = tilesY + tileHeight + sectionGap;
+  const mixPanelHeight = 232;
+  const repoListStartY = lowerPanelsY + 94;
+  const repoList = renderRepositoryList(repositories, padX + leftPanelWidth + lowerPanelGap + 24, repoListStartY, maxOverviewRepos);
+  const repoPanelHeight = Math.max(204, 118 + repoList.height);
+  const lowerPanelHeight = Math.max(mixPanelHeight, repoPanelHeight);
+  const height = lowerPanelsY + lowerPanelHeight + 28;
 
   const repositorySummary = repositoryCount === 0
     ? `No repositories contributed to in the last ${dayCount} days`
     : `Contributed to ${repositoryCount} repositor${repositoryCount === 1 ? "y" : "ies"} in the last ${dayCount} days`;
   const description = `${repositorySummary}. ${activityContributionCount} typed contributions and ${totalContributions} calendar contributions across ${users.join(", ")}.`;
 
-  // Four key stats displayed as large numbers
-  const statCellWidth = (width - padX * 2) / 4;
+  const summaryHeadline = repositoryCount === 0
+    ? "No repository activity recorded in the selected window"
+    : `${formatNumber(repositoryCount)} repositor${repositoryCount === 1 ? "y was" : "ies were"} active in the last ${formatNumber(dayCount)} days`;
+  const summaryDetails = `${formatNumber(totalContributions)} calendar contributions across ${formatNumber(accountCount)} account${accountCount === 1 ? "" : "s"}`;
+  const dominantActivityLabel = activityContributionCount === 0 || !dominantActivity
+    ? "No typed activity captured"
+    : `${dominantActivity.label} led the mix at ${dominantActivity.percentage}%`;
+
   const statItems = [
-    { value: formatNumber(totalContributions), label: "calendar contributions" },
-    { value: formatNumber(activityContributionCount), label: "typed contributions" },
-    { value: formatNumber(repositoryCount), label: "repositories" },
-    { value: formatNumber(dayCount), label: "days tracked" }
+    {
+      value: formatNumber(totalContributions),
+      label: "Calendar contributions",
+      note: `Tracked across ${periodText.toLowerCase()}`
+    },
+    {
+      value: formatNumber(activityContributionCount),
+      label: "Typed contributions",
+      note: "Commits, PRs, issues, and reviews"
+    },
+    {
+      value: formatNumber(repositoryCount),
+      label: "Repositories touched",
+      note: repositoryCount === 0
+        ? "No repositories captured"
+        : `Showing the top ${Math.min(repositoryCount, maxOverviewRepos)} below`
+    }
   ];
   const statsSvg = statItems.map((item, i) => {
-    const x = padX + i * statCellWidth;
+    const x = padX + i * (tileWidth + tileGap);
     return [
-      `<text class="fg" x="${x}" y="${statsNumY}" font-size="24" font-weight="700">${escapeXml(item.value)}</text>`,
-      `<text class="fg-muted" x="${x}" y="${statsLabelY}" font-size="12">${escapeXml(item.label)}</text>`
+      `<rect class="panel" x="${x}" y="${tilesY}" width="${tileWidth}" height="${tileHeight}" rx="16" ry="16" />`,
+      `<text class="fg-muted" x="${x + 20}" y="${tilesY + 25}" font-size="12" font-weight="600">${escapeXml(item.label)}</text>`,
+      `<text class="fg" x="${x + 20}" y="${tilesY + 54}" font-size="26" font-weight="700">${escapeXml(item.value)}</text>`,
+      `<text class="fg-muted" x="${x + 20}" y="${tilesY + 72}" font-size="11">${escapeXml(item.note)}</text>`
     ].join("\n");
   }).join("\n");
 
-  // Full-width activity bars
-  const barLabelWidth = 120;
-  const barTrackWidth = width - padX * 2 - barLabelWidth - 110;
-  const barX = padX + barLabelWidth;
-  const barCountX = width - padX;
-  const barPctX = barCountX - 52;
+  const mixPanelX = padX;
+  const mixPanelInnerX = mixPanelX + 24;
+  const mixPanelRight = mixPanelX + leftPanelWidth - 24;
+  const mixTrackWidth = leftPanelWidth - 48;
+  const mixRowsStart = lowerPanelsY + 82;
+  const barRowHeight = 38;
   const barsSvg = activityRows.map((row, i) => {
-    const y = barsStart + i * barRowHeight;
-    const fillWidth = Math.max(row.percentage === 0 ? 0 : 4, Math.round(barTrackWidth * (row.percentage / 100)));
+    const rowY = mixRowsStart + i * barRowHeight;
+    const fillWidth = Math.max(row.percentage === 0 ? 0 : 6, Math.round(mixTrackWidth * (row.percentage / 100)));
     return [
-      `<text class="fg" x="${padX}" y="${y + 14}" font-size="14" font-weight="600">${escapeXml(row.label)}</text>`,
-      `<rect class="breakdown-track" x="${barX}" y="${y + 4}" width="${barTrackWidth}" height="10" rx="999" ry="999" />`,
-      `<rect class="breakdown-fill" x="${barX}" y="${y + 4}" width="${fillWidth}" height="10" rx="999" ry="999" />`,
-      `<text class="fg-muted" x="${barPctX}" y="${y + 14}" font-size="13" text-anchor="end">${row.percentage}%</text>`,
-      `<text class="fg-muted" x="${barCountX}" y="${y + 14}" font-size="13" text-anchor="end">${escapeXml(formatNumber(row.count))}</text>`
+      `<text class="fg" x="${mixPanelInnerX}" y="${rowY}" font-size="14" font-weight="600">${escapeXml(row.label)}</text>`,
+      `<text class="fg-muted" x="${mixPanelRight}" y="${rowY}" font-size="13" text-anchor="end">${escapeXml(`${formatNumber(row.count)} · ${row.percentage}%`)}</text>`,
+      `<rect class="breakdown-track" x="${mixPanelInnerX}" y="${rowY + 10}" width="${mixTrackWidth}" height="8" rx="999" ry="999" />`,
+      `<rect class="breakdown-fill" x="${mixPanelInnerX}" y="${rowY + 10}" width="${fillWidth}" height="8" rx="999" ry="999" />`
     ].join("\n");
   }).join("\n");
 
-  // Top repos as an inline text line at the bottom
-  const topRepos = repositories.slice(0, maxOverviewRepos);
-  const remainingCount = repositories.length - topRepos.length;
-  let reposSvgStr;
-  if (repositories.length === 0) {
-    reposSvgStr = `<text class="fg-muted" x="${padX}" y="${reposBaselineY}" font-size="13">No repository activity in the last ${dayCount} days</text>`;
-  } else {
-    const repoNames = topRepos.map((r) => truncateText(r.nameWithOwner, 35)).join("  ·  ");
-    const overflow = remainingCount > 0 ? `  ·  and ${remainingCount} more` : "";
-    reposSvgStr = `<text class="fg-muted" x="${padX}" y="${reposBaselineY}" font-size="13">${escapeXml(repoNames + overflow)}</text>`;
-  }
-
-  const periodText = `${formatNumber(dayCount)}-day window`;
+  const repoPanelX = padX + leftPanelWidth + lowerPanelGap;
+  const repoPanelFooterY = lowerPanelsY + lowerPanelHeight - 24;
+  const repoFooterText = repositoryCount === 0
+    ? `No repository activity in the last ${dayCount} days`
+    : `Showing ${Math.min(repositoryCount, maxOverviewRepos)} of ${repositoryCount} repositories`;
 
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
@@ -683,11 +713,16 @@ function renderOverviewSvg({ users, dayCount, repositories, activityTotals, tota
     "      --card-stroke: #d0d7de;",
     "      --fg: #1f2328;",
     "      --fg-muted: #656d76;",
+    "      --panel-bg: #f6f8fa;",
+    "      --panel-stroke: #d8dee4;",
     "      --chip-bg: #f6f8fa;",
     "      --chip-stroke: #d8dee4;",
     "      --chip-dot: #1f883d;",
+    "      --accent: #0969da;",
+    "      --accent-soft: #ddf4ff;",
     "      --breakdown-track: #eaeef2;",
     "      --breakdown-fill: #1f883d;",
+    "      --repo-dot: #1f6feb;",
     "    }",
     "    @media (prefers-color-scheme: dark) {",
     "      svg {",
@@ -695,35 +730,57 @@ function renderOverviewSvg({ users, dayCount, repositories, activityTotals, tota
     "        --card-stroke: #30363d;",
     "        --fg: #f0f6fc;",
     "        --fg-muted: #8b949e;",
+    "        --panel-bg: #161b22;",
+    "        --panel-stroke: #30363d;",
     "        --chip-bg: #161b22;",
     "        --chip-stroke: #30363d;",
     "        --chip-dot: #39d353;",
+    "        --accent: #58a6ff;",
+    "        --accent-soft: rgba(56, 139, 253, 0.16);",
     "        --breakdown-track: #21262d;",
     "        --breakdown-fill: #39d353;",
+    "        --repo-dot: #58a6ff;",
     "      }",
     "    }",
     "    text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }",
     "    .card { fill: var(--bg); stroke: var(--card-stroke); }",
+    "    .panel { fill: var(--panel-bg); stroke: var(--panel-stroke); }",
+    "    .pill { fill: var(--panel-bg); stroke: var(--panel-stroke); }",
+    "    .callout { fill: var(--accent-soft); stroke: var(--accent); }",
     "    .fg { fill: var(--fg); }",
     "    .fg-muted { fill: var(--fg-muted); }",
+    "    .accent { fill: var(--accent); }",
     "    .chip { fill: var(--chip-bg); stroke: var(--chip-stroke); }",
     "    .chip-dot { fill: var(--chip-dot); }",
-    "    .divider { stroke: var(--card-stroke); stroke-width: 1; fill: none; }",
     "    .breakdown-track { fill: var(--breakdown-track); }",
     "    .breakdown-fill { fill: var(--breakdown-fill); }",
+    "    .repo-dot { fill: var(--repo-dot); }",
     "  </style>",
     `  <title>${escapeXml(title)}</title>`,
     `  <desc>${escapeXml(description)}</desc>`,
     `  <rect class="card" x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" rx="18" ry="18" />`,
     `  ${chipLayout.svg}`,
-    `  <text class="fg" x="${padX}" y="${titleY}" font-size="17" font-weight="700">${escapeXml(title)}</text>`,
-    `  <text class="fg-muted" x="${width - padX}" y="${titleY}" font-size="12" text-anchor="end">${escapeXml(periodText)}</text>`,
-    `  <line class="divider" x1="${padX}" y1="${sep1Y}" x2="${width - padX}" y2="${sep1Y}" />`,
+    `  <text class="fg" x="${padX}" y="${titleY}" font-size="19" font-weight="700">${escapeXml(title)}</text>`,
+    `  <rect class="pill" x="${width - padX - periodBadgeWidth}" y="${titleY - 19}" width="${periodBadgeWidth}" height="28" rx="999" ry="999" />`,
+    `  <text class="fg-muted" x="${width - padX - periodBadgeWidth / 2}" y="${titleY}" font-size="12" font-weight="600" text-anchor="middle">${escapeXml(periodText)}</text>`,
+    `  <rect class="panel" x="${padX}" y="${summaryY}" width="${contentWidth}" height="${summaryHeight}" rx="18" ry="18" />`,
+    `  <text class="fg-muted" x="${padX + 24}" y="${summaryY + 28}" font-size="12" font-weight="600" letter-spacing="0.08em">SUMMARY</text>`,
+    `  <text class="fg" x="${padX + 24}" y="${summaryY + 58}" font-size="21" font-weight="700">${escapeXml(summaryHeadline)}</text>`,
+    `  <text class="fg-muted" x="${padX + 24}" y="${summaryY + 82}" font-size="14">${escapeXml(summaryDetails)}</text>`,
+    `  <rect class="callout" x="${width - padX - 220}" y="${summaryY + 18}" width="196" height="68" rx="16" ry="16" />`,
+    `  <text class="accent" x="${width - padX - 196}" y="${summaryY + 42}" font-size="12" font-weight="600">TYPED CONTRIBUTIONS</text>`,
+    `  <text class="fg" x="${width - padX - 196}" y="${summaryY + 72}" font-size="30" font-weight="700">${escapeXml(formatNumber(activityContributionCount))}</text>`,
+    `  <text class="fg-muted" x="${padX + 24}" y="${summaryY + 98}" font-size="13">${escapeXml(dominantActivityLabel)}</text>`,
     `  ${statsSvg}`,
-    `  <line class="divider" x1="${padX}" y1="${sep2Y}" x2="${width - padX}" y2="${sep2Y}" />`,
-    `  <text class="fg-muted" x="${padX}" y="${breakdownLabelY}" font-size="11" font-weight="600" letter-spacing="0.08em">ACTIVITY BREAKDOWN</text>`,
+    `  <rect class="panel" x="${mixPanelX}" y="${lowerPanelsY}" width="${leftPanelWidth}" height="${lowerPanelHeight}" rx="18" ry="18" />`,
+    `  <text class="fg" x="${mixPanelInnerX}" y="${lowerPanelsY + 30}" font-size="17" font-weight="700">Contribution mix</text>`,
+    `  <text class="fg-muted" x="${mixPanelInnerX}" y="${lowerPanelsY + 52}" font-size="13">How typed contributions were distributed across the selected window.</text>`,
     `  ${barsSvg}`,
-    `  ${reposSvgStr}`,
+    `  <rect class="panel" x="${repoPanelX}" y="${lowerPanelsY}" width="${rightPanelWidth}" height="${lowerPanelHeight}" rx="18" ry="18" />`,
+    `  <text class="fg" x="${repoPanelX + 24}" y="${lowerPanelsY + 30}" font-size="17" font-weight="700">Top repositories</text>`,
+    `  <text class="fg-muted" x="${repoPanelX + 24}" y="${lowerPanelsY + 52}" font-size="13">Where activity was most concentrated.</text>`,
+    `  ${repoList.svg}`,
+    `  <text class="fg-muted" x="${repoPanelX + 24}" y="${repoPanelFooterY}" font-size="12">${escapeXml(repoFooterText)}</text>`,
     "</svg>"
   ].join("\n");
 }
