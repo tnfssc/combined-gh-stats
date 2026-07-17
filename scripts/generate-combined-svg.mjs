@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -330,18 +331,7 @@ function normalizeMockContributionStats(entry, login, from, to) {
   return { days, activityTotals, repositories, restrictedContributions };
 }
 
-async function fetchContributionStats(login, from, to, maxRepositories) {
-  const mockFile = process.env.MOCK_DATA_FILE;
-  if (mockFile) {
-    const mockData = await loadMockData(mockFile);
-    return normalizeMockContributionStats(mockData[login], login, from, to);
-  }
-
-  const token = tokenForUser(login);
-  if (!token) {
-    throw new Error(`Missing GITHUB_TOKEN or ${envKeyForUser(login)} for ${login}`);
-  }
-
+async function fetchContributionStatsRange(login, token, from, to, maxRepositories, ranges) {
   const response = await fetch(GRAPHQL_ENDPOINT, {
     method: "POST",
     headers: {
@@ -361,6 +351,22 @@ async function fetchContributionStats(login, from, to, maxRepositories) {
   });
 
   const payload = await response.json();
+  const resourceLimitExceeded = payload.errors?.length
+    && payload.errors.every((error) => error.type === "RESOURCE_LIMITS_EXCEEDED");
+
+  if (resourceLimitExceeded && from < to) {
+    const startDate = new Date(`${from}T00:00:00.000Z`);
+    const endDate = new Date(`${to}T00:00:00.000Z`);
+    const midpoint = addDays(startDate, Math.floor((endDate - startDate) / DAY_MS / 2));
+    const leftEnd = formatDate(midpoint);
+    const rightStart = formatDate(addDays(midpoint, 1));
+
+    console.warn(`GitHub API resource limit reached for ${login}; retrying ${from} to ${to} as smaller ranges`);
+    await fetchContributionStatsRange(login, token, from, leftEnd, maxRepositories, ranges);
+    await fetchContributionStatsRange(login, token, rightStart, to, maxRepositories, ranges);
+    return;
+  }
+
   if (!response.ok || payload.errors?.length) {
     const message = payload.errors?.[0]?.message || response.statusText;
     throw new Error(`GitHub API request failed for ${login}: ${message}`);
@@ -372,7 +378,7 @@ async function fetchContributionStats(login, from, to, maxRepositories) {
   }
 
   const collection = user.contributionsCollection;
-  return {
+  ranges.push({
     days: collection.contributionCalendar.weeks.flatMap((week) => week.contributionDays),
     activityTotals: createActivityTotals({
       commits: collection.totalCommitContributions,
@@ -387,6 +393,41 @@ async function fetchContributionStats(login, from, to, maxRepositories) {
       collection.pullRequestContributionsByRepository,
       collection.pullRequestReviewContributionsByRepository
     ])
+  });
+}
+
+export async function fetchContributionStats(login, from, to, maxRepositories) {
+  const mockFile = process.env.MOCK_DATA_FILE;
+  if (mockFile) {
+    const mockData = await loadMockData(mockFile);
+    return normalizeMockContributionStats(mockData[login], login, from, to);
+  }
+
+  const token = tokenForUser(login);
+  if (!token) {
+    throw new Error(`Missing GITHUB_TOKEN or ${envKeyForUser(login)} for ${login}`);
+  }
+
+  const ranges = [];
+  await fetchContributionStatsRange(login, token, from, to, maxRepositories, ranges);
+
+  const days = [];
+  const activityTotals = { ...EMPTY_ACTIVITY_TOTALS };
+  const repositories = new Map();
+  let restrictedContributions = 0;
+
+  for (const range of ranges) {
+    days.push(...range.days);
+    mergeActivityTotals(activityTotals, range.activityTotals);
+    mergeRepositoryTotals(repositories, range.repositories);
+    restrictedContributions += range.restrictedContributions;
+  }
+
+  return {
+    days,
+    activityTotals,
+    repositories: Array.from(repositories.values()),
+    restrictedContributions
   };
 }
 
@@ -702,7 +743,9 @@ async function main() {
   process.stdout.write(`Wrote ${outputFile} and ${overviewOutputFile} for ${users.join(", ")}\n`);
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.message}\n`);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().catch((error) => {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  });
+}

@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "generate": "node --env-file-if-exists=.env scripts/generate-combined-svg.mjs",
+    "test": "node --test",
     "verify:mock": "MOCK_DATA_FILE=fixtures/mock-contributions.json USERS=alice,bob OUTPUT_FILE=tmp/combined-contributions.svg node --env-file-if-exists=.env scripts/generate-combined-svg.mjs"
   }
 }
