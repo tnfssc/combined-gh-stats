@@ -34,10 +34,11 @@ function successfulPayload({ days, commits, issues, pullRequests, reviews, restr
   };
 }
 
-test("splits resource-heavy date ranges and merges their contribution stats", async (context) => {
+test("bounds request ranges, splits resource errors, and merges contribution stats", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalToken = process.env.GITHUB_TOKEN;
   const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
   const originalWarn = console.warn;
   const requests = [];
   const warnings = [];
@@ -55,9 +56,15 @@ test("splits resource-heavy date ranges and merges their contribution stats", as
     } else {
       process.env.MOCK_DATA_FILE = originalMockFile;
     }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
   });
 
   process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "4";
   delete process.env.MOCK_DATA_FILE;
   console.warn = (message) => warnings.push(message);
   globalThis.fetch = async (_url, options) => {
@@ -78,6 +85,7 @@ test("splits resource-heavy date ranges and merges their contribution stats", as
     }
 
     const firstHalf = variables.from.startsWith("2026-01-01");
+    const secondHalf = variables.from.startsWith("2026-01-03");
     const payload = firstHalf
       ? successfulPayload({
           days: [
@@ -91,7 +99,8 @@ test("splits resource-heavy date ranges and merges their contribution stats", as
           restricted: 1,
           repositories: [{ nameWithOwner: "acme/app", totalCount: 2 }]
         })
-      : successfulPayload({
+      : secondHalf
+        ? successfulPayload({
           days: [
             { date: "2026-01-03", contributionCount: 3 },
             { date: "2026-01-04", contributionCount: 4 }
@@ -105,6 +114,20 @@ test("splits resource-heavy date ranges and merges their contribution stats", as
             { nameWithOwner: "acme/app", totalCount: 4 },
             { nameWithOwner: "acme/api", totalCount: 2 }
           ]
+        })
+        : successfulPayload({
+          days: [
+            { date: "2026-01-05", contributionCount: 5 },
+            { date: "2026-01-06", contributionCount: 6 },
+            { date: "2026-01-07", contributionCount: 7 },
+            { date: "2026-01-08", contributionCount: 8 }
+          ],
+          commits: 26,
+          issues: 2,
+          pullRequests: 1,
+          reviews: 3,
+          restricted: 4,
+          repositories: [{ nameWithOwner: "acme/api", totalCount: 5 }]
         });
 
     return {
@@ -114,26 +137,31 @@ test("splits resource-heavy date ranges and merges their contribution stats", as
     };
   };
 
-  const stats = await fetchContributionStats("active-user", "2026-01-01", "2026-01-04", 100);
+  const stats = await fetchContributionStats("active-user", "2026-01-01", "2026-01-08", 100);
 
   assert.deepEqual(requests, [
     ["2026-01-01", "2026-01-04"],
     ["2026-01-01", "2026-01-02"],
-    ["2026-01-03", "2026-01-04"]
+    ["2026-01-03", "2026-01-04"],
+    ["2026-01-05", "2026-01-08"]
   ]);
   assert.deepEqual(stats.days.map((day) => day.date), [
     "2026-01-01",
     "2026-01-02",
     "2026-01-03",
-    "2026-01-04"
+    "2026-01-04",
+    "2026-01-05",
+    "2026-01-06",
+    "2026-01-07",
+    "2026-01-08"
   ]);
   assert.deepEqual(stats.activityTotals, {
-    commits: 10,
-    issues: 1,
-    pullRequests: 2,
-    reviews: 2
+    commits: 36,
+    issues: 3,
+    pullRequests: 3,
+    reviews: 5
   });
-  assert.equal(stats.restrictedContributions, 3);
+  assert.equal(stats.restrictedContributions, 7);
   assert.deepEqual(stats.repositories, [
     {
       nameWithOwner: "acme/app",
@@ -143,7 +171,7 @@ test("splits resource-heavy date ranges and merges their contribution stats", as
     {
       nameWithOwner: "acme/api",
       url: "https://github.com/acme/api",
-      totalCount: 2
+      totalCount: 7
     }
   ]);
   assert.equal(warnings.length, 1);

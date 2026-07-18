@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 const GRAPHQL_ENDPOINT = "https://api.github.com/graphql";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_QUERY_DAYS = 90;
 const COLOR_LEVELS = [0, 1, 2, 3, 4];
 const EMPTY_ACTIVITY_TOTALS = Object.freeze({
   commits: 0,
@@ -408,8 +409,27 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
     throw new Error(`Missing GITHUB_TOKEN or ${envKeyForUser(login)} for ${login}`);
   }
 
+  const maxQueryDays = parsePositiveInteger(process.env.MAX_QUERY_DAYS, DEFAULT_QUERY_DAYS);
+  const startDate = new Date(`${from}T00:00:00.000Z`);
+  const endDate = new Date(`${to}T00:00:00.000Z`);
   const ranges = [];
-  await fetchContributionStatsRange(login, token, from, to, maxRepositories, ranges);
+
+  for (let rangeStart = startDate; rangeStart <= endDate;) {
+    const rangeEnd = new Date(Math.min(
+      addDays(rangeStart, maxQueryDays - 1).getTime(),
+      endDate.getTime()
+    ));
+
+    await fetchContributionStatsRange(
+      login,
+      token,
+      formatDate(rangeStart),
+      formatDate(rangeEnd),
+      maxRepositories,
+      ranges
+    );
+    rangeStart = addDays(rangeEnd, 1);
+  }
 
   const days = [];
   const activityTotals = { ...EMPTY_ACTIVITY_TOTALS };
