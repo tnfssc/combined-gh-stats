@@ -379,3 +379,80 @@ test("throws error with status code (not SyntaxError) on non-JSON 5xx response",
     }
   );
 });
+
+test("retries on HTTP 403 rate limit then succeeds", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
+  const originalWarn = console.warn;
+  const warnings = [];
+  const calls = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    if (originalToken === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
+    if (originalMockFile === undefined) {
+      delete process.env.MOCK_DATA_FILE;
+    } else {
+      process.env.MOCK_DATA_FILE = originalMockFile;
+    }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
+  });
+
+  process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "4";
+  delete process.env.MOCK_DATA_FILE;
+  console.warn = (message) => warnings.push(message);
+
+  globalThis.fetch = async () => {
+    calls.push(calls.length);
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 403,
+        statusText: "Forbidden",
+        headers: new Map([["Retry-After", "0"]]),
+        text: async () => '{"message": "rate limit"}',
+        json: async () => ({ message: "rate limit" })
+      };
+    }
+
+    const payload = successfulPayload({
+      days: [
+        { date: "2026-01-01", contributionCount: 1 },
+        { date: "2026-01-02", contributionCount: 2 }
+      ],
+      commits: 3,
+      issues: 1,
+      pullRequests: 0,
+      reviews: 1,
+      restricted: 0,
+      repositories: [{ nameWithOwner: "acme/app", totalCount: 2 }]
+    });
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Map(),
+      text: async () => JSON.stringify(payload),
+      json: async () => payload
+    };
+  };
+
+  const stats = await fetchContributionStats("active-user", "2026-01-01", "2026-01-02", 100);
+
+  assert.equal(calls.length, 2, "fetch retried after 403");
+  assert.ok(warnings.some((w) => /rate limit/i.test(w)), "warned about rate limit");
+  assert.deepEqual(stats.days.map((d) => d.date), ["2026-01-01", "2026-01-02"]);
+  assert.equal(stats.activityTotals.commits, 3);
+});

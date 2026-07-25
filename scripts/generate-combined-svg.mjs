@@ -140,6 +140,53 @@ function formatNumber(n) {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+const MAX_RATE_LIMIT_ATTEMPTS = 5;
+const RATE_LIMIT_BASE_BACKOFF_MS = 1000;
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function parseHeaderSeconds(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+  const seconds = Number.parseFloat(value);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+function computeRateLimitSleepMs(response, attempt) {
+  const headers = response.headers || {};
+  const getHeader = typeof headers.get === "function" ? headers.get.bind(headers) : (name) => headers[name];
+
+  const retryAfter = parseHeaderSeconds(getHeader("Retry-After"));
+  if (retryAfter != null) {
+    return Math.max(0, retryAfter * 1000);
+  }
+
+  const reset = parseHeaderSeconds(getHeader("X-RateLimit-Reset"));
+  if (reset != null) {
+    const nowSeconds = Date.now() / 1000;
+    const remaining = reset - nowSeconds;
+    if (remaining > 0) {
+      return remaining * 1000;
+    }
+    return 0;
+  }
+
+  return RATE_LIMIT_BASE_BACKOFF_MS * 2 ** attempt;
+}
+
+function envKeyForUser(login) {
+  return `GITHUB_TOKEN_${login.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+}
+
+function tokenForUser(login) {
+  return process.env[envKeyForUser(login)] || process.env.GITHUB_TOKEN || "";
+}
+
 function pickThreshold(sortedValues, ratio) {
   if (sortedValues.length === 0) {
     return 0;
@@ -312,26 +359,48 @@ function normalizeMockContributionStats(entry, login, from, to) {
 }
 
 async function fetchContributionStatsRange(login, token, from, to, maxRepositories, ranges) {
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `bearer ${token}`,
-      "Content-Type": "application/json",
-      "User-Agent": "combine-gh-stats"
-    },
-    body: JSON.stringify({
-      query: CONTRIBUTIONS_QUERY,
-      variables: {
-        login,
-        from: `${from}T00:00:00.000Z`,
-        to: `${to}T23:59:59.999Z`,
-        maxRepositories
-      }
-    })
-  });
+  let response;
+  let payload;
+
+  for (let attempt = 0; attempt < MAX_RATE_LIMIT_ATTEMPTS; attempt++) {
+    response = await fetch(GRAPHQL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `bearer ${token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "combine-gh-stats"
+      },
+      body: JSON.stringify({
+        query: CONTRIBUTIONS_QUERY,
+        variables: {
+          login,
+          from: `${from}T00:00:00.000Z`,
+          to: `${to}T23:59:59.999Z`,
+          maxRepositories
+        }
+      })
+    });
+
+    if (response.status === 403 || response.status === 429) {
+      const sleepMs = computeRateLimitSleepMs(response, attempt);
+      console.warn(
+        `GitHub API rate limit hit for ${login} (${response.status}); sleeping ${Math.round(sleepMs)} ms before retry (attempt ${attempt + 1}/${MAX_RATE_LIMIT_ATTEMPTS})`
+      );
+      await sleep(sleepMs);
+      continue;
+    }
+
+    break;
+  }
+
+  if (response.status === 403 || response.status === 429) {
+    throw new Error(
+      `GitHub API rate limit exceeded for ${login} after ${MAX_RATE_LIMIT_ATTEMPTS} attempts; aborting ${from} to ${to}`
+    );
+  }
 
   const responseText = await response.text();
-  let payload = {};
+  payload = {};
   if (responseText) {
     try {
       payload = JSON.parse(responseText);
