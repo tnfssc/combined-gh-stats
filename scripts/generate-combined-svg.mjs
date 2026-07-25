@@ -452,7 +452,7 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
   };
 }
 
-function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, title }) {
+export function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, title }) {
   const nonZeroCounts = days.map((day) => day.count).filter((count) => count > 0).sort((a, b) => a - b);
   const thresholds = [
     pickThreshold(nonZeroCounts, 0.25),
@@ -559,7 +559,7 @@ function computeCurrentStreak(days) {
   return streak;
 }
 
-function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, restrictedContributions, title }) {
+export function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, restrictedContributions, repositories, maxOverviewRepos, title }) {
   const weeklyTotals = weeks.map((week) => week.reduce((sum, d) => sum + d.count, 0));
   const nonZeroWeekly = weeklyTotals.filter((t) => t > 0).sort((a, b) => a - b);
   const weekThresholds = [
@@ -588,7 +588,36 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
     ? `GitHub reports ${formatNumber(restrictedContributions)} private contribution${restrictedContributions === 1 ? "" : "s"} in this window, so commits, PRs, issues, and reviews may not add up to the total.`
     : "";
   const restrictedNoteY = footerY + 11;
-  const height = restrictedNote ? restrictedNoteY + 8 : footerY + 14;
+  const contentBottomY = restrictedNote ? restrictedNoteY + 8 : footerY + 14;
+
+  const topRepositories = Array.isArray(repositories)
+    ? [...repositories]
+        .sort((left, right) => right.totalCount - left.totalCount || left.nameWithOwner.localeCompare(right.nameWithOwner))
+        .slice(0, Math.max(0, Number(maxOverviewRepos) || 0))
+    : [];
+
+  const repoSectionGap = 10;
+  const repoLabelY = contentBottomY + repoSectionGap + 10;
+  const repoEntryStep = 14;
+  const repoFirstEntryY = repoLabelY + 16;
+  const repoContentWidth = width - 2 * padX;
+  const repoCountFont = 11;
+  const repoCountGap = 8;
+
+  const repoEntries = topRepositories.map((repository, index) => {
+    const countText = formatNumber(repository.totalCount);
+    const countWidth = estimateTextWidth(countText, repoCountFont);
+    const availableNameWidth = repoContentWidth - countWidth - repoCountGap;
+    const maxNameChars = Math.max(4, Math.floor(availableNameWidth / (repoCountFont * 0.58)));
+    const nameText = truncateText(repository.nameWithOwner, maxNameChars);
+    const y = repoFirstEntryY + index * repoEntryStep;
+    return `<text x="${padX}" y="${y}" font-size="${repoCountFont}"><tspan class="fg">${escapeXml(nameText)}</tspan><tspan class="fg-muted" x="${width - padX}" text-anchor="end">${escapeXml(countText)}</tspan></text>`;
+  });
+
+  const hasRepos = repoEntries.length > 0;
+  const height = hasRepos
+    ? repoFirstEntryY + (repoEntries.length - 1) * repoEntryStep + 6
+    : contentBottomY;
 
   let lastMonth = -1;
   const barsAndLabels = weeks.map((week, wi) => {
@@ -670,6 +699,8 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
     `  <line class="divider" x1="${padX}" y1="${dividerY}" x2="${width - padX}" y2="${dividerY}" stroke-width="1" />`,
     `  <text x="${padX}" y="${footerY}" font-size="11">${footerTspans}</text>`,
     restrictedNote ? `  <text class="fg-muted" x="${padX}" y="${restrictedNoteY}" font-size="9">${escapeXml(restrictedNote)}</text>` : "",
+    hasRepos ? `  <text class="fg-muted" x="${padX}" y="${repoLabelY}" font-size="10" font-weight="600">Top repositories</text>` : "",
+    ...repoEntries.map((entry) => `  ${entry}`),
     "</svg>"
   ].join("\n");
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fetchContributionStats } from "../scripts/generate-combined-svg.mjs";
+import { fetchContributionStats, renderOverviewSvg } from "../scripts/generate-combined-svg.mjs";
 
 function successfulPayload({ days, commits, issues, pullRequests, reviews, restricted, repositories }) {
   return {
@@ -175,4 +175,55 @@ test("bounds request ranges, splits resource errors, and merges contribution sta
     }
   ]);
   assert.equal(warnings.length, 1);
+});
+
+
+function buildOverviewInput({ repositories, maxOverviewRepos } = {}) {
+  // A multi-week grid keeps the SVG width realistic so repo names are not truncated.
+  const days = [];
+  for (let i = 0; i < 10 * 7; i += 1) {
+    const date = `2026-01-${String((i % 28) + 1).padStart(2, "0")}`;
+    days.push({ date, count: i % 5 });
+  }
+  const weeks = [];
+  for (let index = 0; index < days.length; index += 7) {
+    weeks.push(days.slice(index, index + 7));
+  }
+  return {
+    users: ["active-user"],
+    dayCount: 70,
+    days,
+    weeks,
+    repositories,
+    maxOverviewRepos,
+    activityTotals: { commits: 7, issues: 1, pullRequests: 2, reviews: 1 },
+    totalContributions: 10,
+    restrictedContributions: 0,
+    title: "Overview Test"
+  };
+}
+
+test("renderOverviewSvg renders top repositories with their counts", () => {
+  const repositories = [
+    { nameWithOwner: "acme/api", url: "https://github.com/acme/api", totalCount: 7 },
+    { nameWithOwner: "acme/app", url: "https://github.com/acme/app", totalCount: 6 },
+    { nameWithOwner: "acme/web", url: "https://github.com/acme/web", totalCount: 3 }
+  ];
+  const svg = renderOverviewSvg(buildOverviewInput({ repositories, maxOverviewRepos: 2 }));
+
+  assert.ok(svg.includes("Top repositories"), "expected a Top repositories section");
+  assert.ok(svg.includes("acme/api"), "expected top repo nameWithOwner");
+  assert.ok(svg.includes("acme/app"), "expected second repo nameWithOwner");
+  assert.ok(svg.includes(">7</tspan>"), "expected formatted top repo count");
+  assert.ok(svg.includes(">6</tspan>"), "expected formatted second repo count");
+  // maxOverviewRepos limits the list to 2 entries.
+  assert.ok(!svg.includes("acme/web"), "did not expect third repo beyond maxOverviewRepos");
+});
+
+test("renderOverviewSvg handles an empty repository list without crashing", () => {
+  const svg = renderOverviewSvg(buildOverviewInput({ repositories: [], maxOverviewRepos: 3 }));
+
+  assert.ok(svg.startsWith("<svg"), "expected valid svg output");
+  assert.ok(svg.endsWith("</svg>"), "expected closed svg element");
+  assert.ok(!svg.includes("Top repositories"), "did not expect a Top repositories section for empty list");
 });
