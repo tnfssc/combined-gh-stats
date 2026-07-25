@@ -12,12 +12,6 @@ const EMPTY_ACTIVITY_TOTALS = Object.freeze({
   pullRequests: 0,
   reviews: 0
 });
-const ACTIVITY_SECTIONS = [
-  { key: "commits", label: "Commits" },
-  { key: "pullRequests", label: "Pull requests" },
-  { key: "issues", label: "Issues" },
-  { key: "reviews", label: "Code review" }
-];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const CONTRIBUTIONS_QUERY = `
   query CombinedContributionStats($login: String!, $from: DateTime!, $to: DateTime!, $maxRepositories: Int!) {
@@ -150,12 +144,43 @@ function formatNumber(n) {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-function envKeyForUser(login) {
-  return `GITHUB_TOKEN_${login.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+const MAX_RATE_LIMIT_ATTEMPTS = 5;
+const RATE_LIMIT_BASE_BACKOFF_MS = 1000;
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
-function tokenForUser(login) {
-  return process.env[envKeyForUser(login)] || process.env.GITHUB_TOKEN || "";
+function parseHeaderSeconds(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+  const seconds = Number.parseFloat(value);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+function computeRateLimitSleepMs(response, attempt) {
+  const headers = response.headers || {};
+  const getHeader = typeof headers.get === "function" ? headers.get.bind(headers) : (name) => headers[name];
+
+  const retryAfter = parseHeaderSeconds(getHeader("Retry-After"));
+  if (retryAfter != null) {
+    return Math.max(0, retryAfter * 1000);
+  }
+
+  const reset = parseHeaderSeconds(getHeader("X-RateLimit-Reset"));
+  if (reset != null) {
+    const nowSeconds = Date.now() / 1000;
+    const remaining = reset - nowSeconds;
+    if (remaining > 0) {
+      return remaining * 1000;
+    }
+    return 0;
+  }
+
+  return RATE_LIMIT_BASE_BACKOFF_MS * 2 ** attempt;
 }
 
 function pickThreshold(sortedValues, ratio) {
@@ -204,10 +229,6 @@ function createActivityTotals(activity = {}) {
     pullRequests: Number(activity.pullRequests ?? activity.prs) || 0,
     reviews: Number(activity.reviews ?? activity.codeReviews) || 0
   };
-}
-
-function sumActivityTotals(totals) {
-  return totals.commits + totals.issues + totals.pullRequests + totals.reviews;
 }
 
 function mergeActivityTotals(target, source) {
@@ -334,25 +355,55 @@ function normalizeMockContributionStats(entry, login, from, to) {
 }
 
 async function fetchContributionStatsRange(login, token, from, to, maxRepositories, ranges) {
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `bearer ${token}`,
-      "Content-Type": "application/json",
-      "User-Agent": "combine-gh-stats"
-    },
-    body: JSON.stringify({
-      query: CONTRIBUTIONS_QUERY,
-      variables: {
-        login,
-        from: `${from}T00:00:00.000Z`,
-        to: `${to}T23:59:59.999Z`,
-        maxRepositories
-      }
-    })
-  });
+  let response;
+  let payload;
 
-  const payload = await response.json();
+  for (let attempt = 0; attempt < MAX_RATE_LIMIT_ATTEMPTS; attempt++) {
+    response = await fetch(GRAPHQL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `bearer ${token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "combine-gh-stats"
+      },
+      body: JSON.stringify({
+        query: CONTRIBUTIONS_QUERY,
+        variables: {
+          login,
+          from: `${from}T00:00:00.000Z`,
+          to: `${to}T23:59:59.999Z`,
+          maxRepositories
+        }
+      })
+    });
+
+    if (response.status === 403 || response.status === 429) {
+      const sleepMs = computeRateLimitSleepMs(response, attempt);
+      console.warn(
+        `GitHub API rate limit hit for ${login} (${response.status}); sleeping ${Math.round(sleepMs)} ms before retry (attempt ${attempt + 1}/${MAX_RATE_LIMIT_ATTEMPTS})`
+      );
+      await sleep(sleepMs);
+      continue;
+    }
+
+    break;
+  }
+
+  if (response.status === 403 || response.status === 429) {
+    throw new Error(
+      `GitHub API rate limit exceeded for ${login} after ${MAX_RATE_LIMIT_ATTEMPTS} attempts; aborting ${from} to ${to}`
+    );
+  }
+
+  const responseText = await response.text();
+  payload = {};
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      payload = {};
+    }
+  }
   const resourceLimitExceeded = payload.errors?.length
     && payload.errors.every((error) => error.type === "RESOURCE_LIMITS_EXCEEDED");
 
@@ -371,7 +422,8 @@ async function fetchContributionStatsRange(login, token, from, to, maxRepositori
 
   if (!response.ok || payload.errors?.length) {
     const message = payload.errors?.[0]?.message || response.statusText;
-    throw new Error(`GitHub API request failed for ${login}: ${message}`);
+    const snippet = responseText.slice(0, 200);
+    throw new Error(`GitHub API request failed for ${login}: ${message} (HTTP ${response.status}${snippet ? `: ${snippet}` : ""})`);
   }
 
   const user = payload.data?.user;
@@ -405,12 +457,16 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
     return normalizeMockContributionStats(mockData[login], login, from, to);
   }
 
-  const token = tokenForUser(login);
+  const token = process.env.GITHUB_TOKEN;
   if (!token) {
-    throw new Error(`Missing GITHUB_TOKEN or ${envKeyForUser(login)} for ${login}`);
+    throw new Error("Missing GITHUB_TOKEN environment variable");
   }
 
-  const maxQueryDays = parsePositiveInteger(process.env.MAX_QUERY_DAYS, DEFAULT_QUERY_DAYS);
+  const requestedQueryDays = parsePositiveInteger(process.env.MAX_QUERY_DAYS, DEFAULT_QUERY_DAYS);
+  const maxQueryDays = Math.min(requestedQueryDays, 365);
+  if (requestedQueryDays > 365) {
+    console.warn(`MAX_QUERY_DAYS=${requestedQueryDays} exceeds GitHub's 1-year window; clamping to 365.`);
+  }
   const startDate = new Date(`${from}T00:00:00.000Z`);
   const endDate = new Date(`${to}T00:00:00.000Z`);
   const ranges = [];
@@ -433,12 +489,19 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
   }
 
   const days = [];
+  const seenDates = new Set();
   const activityTotals = { ...EMPTY_ACTIVITY_TOTALS };
   const repositories = new Map();
   let restrictedContributions = 0;
 
   for (const range of ranges) {
-    days.push(...range.days);
+    for (const day of range.days) {
+      if (seenDates.has(day.date)) {
+        continue;
+      }
+      seenDates.add(day.date);
+      days.push(day);
+    }
     mergeActivityTotals(activityTotals, range.activityTotals);
     mergeRepositoryTotals(repositories, range.repositories);
     restrictedContributions += range.restrictedContributions;
