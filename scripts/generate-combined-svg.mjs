@@ -18,6 +18,7 @@ const ACTIVITY_SECTIONS = [
   { key: "issues", label: "Issues" },
   { key: "reviews", label: "Code review" }
 ];
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const CONTRIBUTIONS_QUERY = `
   query CombinedContributionStats($login: String!, $from: DateTime!, $to: DateTime!, $maxRepositories: Int!) {
     user(login: $login) {
@@ -467,7 +468,6 @@ function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, 
   const width = left + weeks.length * (cellSize + gap) + 8;
   const height = top + 7 * (cellSize + gap) + footerHeight;
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   let lastRenderedMonth = -1;
   const monthLabels = weeks.map((week, weekIndex) => {
     const firstOfMonth = week.find((day) => day.date.slice(8) === "01");
@@ -482,7 +482,7 @@ function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, 
 
     lastRenderedMonth = monthIndex;
     const x = left + weekIndex * (cellSize + gap);
-    return `<text class="fg-muted" x="${x}" y="16" font-size="10">${monthNames[monthIndex]}</text>`;
+    return `<text class="fg-muted" x="${x}" y="16" font-size="10">${MONTH_NAMES[monthIndex]}</text>`;
   }).join("");
 
   const weekdayLabels = [
@@ -590,7 +590,6 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
   const restrictedNoteY = footerY + 11;
   const height = restrictedNote ? restrictedNoteY + 8 : footerY + 14;
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   let lastMonth = -1;
   const barsAndLabels = weeks.map((week, wi) => {
     const total = weeklyTotals[wi];
@@ -607,7 +606,7 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
       const monthIndex = Number.parseInt(firstOfMonth.date.slice(5, 7), 10) - 1;
       if (monthIndex !== lastMonth) {
         lastMonth = monthIndex;
-        monthLabel = `<text class="fg-muted" x="${x}" y="${monthLabelY}" font-size="10">${monthNames[monthIndex]}</text>`;
+        monthLabel = `<text class="fg-muted" x="${x}" y="${monthLabelY}" font-size="10">${MONTH_NAMES[monthIndex]}</text>`;
       }
     }
 
