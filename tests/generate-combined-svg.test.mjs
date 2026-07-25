@@ -246,3 +246,83 @@ test("clamps MAX_QUERY_DAYS above 365 to 365", async (context) => {
     `expected a clamp warning, got: ${JSON.stringify(warnings)}`
   );
 });
+
+test("dedupes days that appear at chunk boundaries across consecutive chunks", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
+    if (originalMockFile === undefined) {
+      delete process.env.MOCK_DATA_FILE;
+    } else {
+      process.env.MOCK_DATA_FILE = originalMockFile;
+    }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
+  });
+
+  process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "2";
+  delete process.env.MOCK_DATA_FILE;
+
+  // Two consecutive chunks (each full calendar week returned by GitHub) both
+  // return the boundary date 2026-01-02. Without dedupe the merged count for
+  // that date would be 2x; with dedupe it must equal the single value.
+  const boundaryDate = "2026-01-02";
+  const boundaryCount = 5;
+
+  globalThis.fetch = async (_url, options) => {
+    const { variables } = JSON.parse(options.body);
+    const firstChunk = variables.from.startsWith("2026-01-01");
+    const secondChunk = variables.from.startsWith("2026-01-03");
+
+    const days = firstChunk
+      ? [
+          { date: "2026-01-01", contributionCount: 1 },
+          { date: boundaryDate, contributionCount: boundaryCount }
+        ]
+      : secondChunk
+        ? [
+            { date: boundaryDate, contributionCount: boundaryCount },
+            { date: "2026-01-03", contributionCount: 3 }
+          ]
+        : [];
+
+    return {
+      ok: true,
+      statusText: "OK",
+      json: async () => successfulPayload({
+        days,
+        commits: days.reduce((sum, day) => sum + day.contributionCount, 0),
+        issues: 0,
+        pullRequests: 0,
+        reviews: 0,
+        restricted: 0,
+        repositories: []
+      })
+    };
+  };
+
+  const stats = await fetchContributionStats("boundary-user", "2026-01-01", "2026-01-03", 100);
+
+  // The boundary date must appear exactly once.
+  const boundaryDays = stats.days.filter((day) => day.date === boundaryDate);
+  assert.equal(boundaryDays.length, 1, "boundary date counted more than once");
+  assert.equal(boundaryDays[0].contributionCount, boundaryCount);
+  assert.deepEqual(stats.days.map((day) => day.date), [
+    "2026-01-01",
+    "2026-01-02",
+    "2026-01-03"
+  ]);
+});

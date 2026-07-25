@@ -415,12 +415,19 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
   }
 
   const days = [];
+  const seenDates = new Set();
   const activityTotals = { ...EMPTY_ACTIVITY_TOTALS };
   const repositories = new Map();
   let restrictedContributions = 0;
 
   for (const range of ranges) {
-    days.push(...range.days);
+    for (const day of range.days) {
+      if (seenDates.has(day.date)) {
+        continue;
+      }
+      seenDates.add(day.date);
+      days.push(day);
+    }
     mergeActivityTotals(activityTotals, range.activityTotals);
     mergeRepositoryTotals(repositories, range.repositories);
     restrictedContributions += range.restrictedContributions;
