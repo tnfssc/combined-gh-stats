@@ -74,8 +74,9 @@ test("bounds request ranges, splits resource errors, and merges contribution sta
     if (variables.from.startsWith("2026-01-01") && variables.to.startsWith("2026-01-04")) {
       return {
         ok: true,
+        status: 200,
         statusText: "OK",
-        json: async () => ({
+        text: async () => JSON.stringify({
           errors: [{
             type: "RESOURCE_LIMITS_EXCEEDED",
             message: "Resource limits for this query exceeded."
@@ -132,8 +133,9 @@ test("bounds request ranges, splits resource errors, and merges contribution sta
 
     return {
       ok: true,
+      status: 200,
       statusText: "OK",
-      json: async () => payload
+      text: async () => JSON.stringify(payload)
     };
   };
 
@@ -226,4 +228,280 @@ test("renderOverviewSvg handles an empty repository list without crashing", () =
   assert.ok(svg.startsWith("<svg"), "expected valid svg output");
   assert.ok(svg.endsWith("</svg>"), "expected closed svg element");
   assert.ok(!svg.includes("Top repositories"), "did not expect a Top repositories section for empty list");
+});
+
+test("clamps MAX_QUERY_DAYS above 365 to 365", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
+  const originalWarn = console.warn;
+  const requests = [];
+  const warnings = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    if (originalToken === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
+    if (originalMockFile === undefined) {
+      delete process.env.MOCK_DATA_FILE;
+    } else {
+      process.env.MOCK_DATA_FILE = originalMockFile;
+    }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
+  });
+
+  process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "400";
+  delete process.env.MOCK_DATA_FILE;
+  console.warn = (message) => warnings.push(message);
+  globalThis.fetch = async (_url, options) => {
+    const { variables } = JSON.parse(options.body);
+    requests.push([variables.from.slice(0, 10), variables.to.slice(0, 10)]);
+
+    const fromMs = new Date(variables.from).getTime();
+    const toMs = new Date(variables.to).getTime();
+    assert.ok(
+      toMs - fromMs < 365 * 24 * 60 * 60 * 1000,
+      `range ${variables.from}..${variables.to} exceeds 365-day window`
+    );
+
+    const payload = successfulPayload({
+      days: [{ date: variables.to.slice(0, 10), contributionCount: 1 }],
+      commits: 1,
+      issues: 0,
+      pullRequests: 0,
+      reviews: 0,
+      restricted: 0,
+      repositories: []
+    });
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => JSON.stringify(payload),
+      json: async () => payload
+    };
+  };
+
+  const stats = await fetchContributionStats("active-user", "2026-01-01", "2026-12-31", 100);
+
+  assert.equal(requests.length, 1, "single request expected for a within-year window");
+  assert.deepEqual(requests[0], ["2026-01-01", "2026-12-31"]);
+  assert.equal(stats.activityTotals.commits, 1);
+  assert.ok(
+    warnings.some((m) => /clamping to 365/.test(m)),
+    `expected a clamp warning, got: ${JSON.stringify(warnings)}`
+  );
+});
+
+test("dedupes days that appear at chunk boundaries across consecutive chunks", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
+    if (originalMockFile === undefined) {
+      delete process.env.MOCK_DATA_FILE;
+    } else {
+      process.env.MOCK_DATA_FILE = originalMockFile;
+    }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
+  });
+
+  process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "2";
+  delete process.env.MOCK_DATA_FILE;
+
+  const boundaryDate = "2026-01-02";
+  const boundaryCount = 5;
+
+  globalThis.fetch = async (_url, options) => {
+    const { variables } = JSON.parse(options.body);
+    const firstChunk = variables.from.startsWith("2026-01-01");
+    const secondChunk = variables.from.startsWith("2026-01-03");
+
+    const days = firstChunk
+      ? [
+          { date: "2026-01-01", contributionCount: 1 },
+          { date: boundaryDate, contributionCount: boundaryCount }
+        ]
+      : secondChunk
+        ? [
+            { date: boundaryDate, contributionCount: boundaryCount },
+            { date: "2026-01-03", contributionCount: 3 }
+          ]
+        : [];
+
+    const payload = successfulPayload({
+      days,
+      commits: days.reduce((sum, day) => sum + day.contributionCount, 0),
+      issues: 0,
+      pullRequests: 0,
+      reviews: 0,
+      restricted: 0,
+      repositories: []
+    });
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => JSON.stringify(payload),
+      json: async () => payload
+    };
+  };
+
+  const stats = await fetchContributionStats("boundary-user", "2026-01-01", "2026-01-03", 100);
+
+  const boundaryDays = stats.days.filter((day) => day.date === boundaryDate);
+  assert.equal(boundaryDays.length, 1, "boundary date counted more than once");
+  assert.equal(boundaryDays[0].contributionCount, boundaryCount);
+  assert.deepEqual(stats.days.map((day) => day.date), [
+    "2026-01-01",
+    "2026-01-02",
+    "2026-01-03"
+  ]);
+});
+
+test("throws error with status code (not SyntaxError) on non-JSON 5xx response", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
+    if (originalMockFile === undefined) {
+      delete process.env.MOCK_DATA_FILE;
+    } else {
+      process.env.MOCK_DATA_FILE = originalMockFile;
+    }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
+  });
+
+  process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "4";
+  delete process.env.MOCK_DATA_FILE;
+
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 500,
+    statusText: "Internal Server Error",
+    text: async () => "<!DOCTYPE html><html><body>Server error</body></html>"
+  });
+
+  await assert.rejects(
+    fetchContributionStats("active-user", "2026-01-01", "2026-01-08", 100),
+    (error) => {
+      assert.equal(error.name, "Error", "should not be a SyntaxError");
+      assert.ok(!error.message.includes("SyntaxError"), "should not be a SyntaxError");
+      assert.ok(error.message.includes("500"), `message should include status 500: ${error.message}`);
+      return true;
+    }
+  );
+});
+
+test("retries on HTTP 403 rate limit then succeeds", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
+  const originalWarn = console.warn;
+  const warnings = [];
+  const calls = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    if (originalToken === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
+    if (originalMockFile === undefined) {
+      delete process.env.MOCK_DATA_FILE;
+    } else {
+      process.env.MOCK_DATA_FILE = originalMockFile;
+    }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
+  });
+
+  process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "4";
+  delete process.env.MOCK_DATA_FILE;
+  console.warn = (message) => warnings.push(message);
+
+  globalThis.fetch = async () => {
+    calls.push(calls.length);
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 403,
+        statusText: "Forbidden",
+        headers: new Map([["Retry-After", "0"]]),
+        text: async () => '{"message": "rate limit"}',
+        json: async () => ({ message: "rate limit" })
+      };
+    }
+
+    const payload = successfulPayload({
+      days: [
+        { date: "2026-01-01", contributionCount: 1 },
+        { date: "2026-01-02", contributionCount: 2 }
+      ],
+      commits: 3,
+      issues: 1,
+      pullRequests: 0,
+      reviews: 1,
+      restricted: 0,
+      repositories: [{ nameWithOwner: "acme/app", totalCount: 2 }]
+    });
+    return {
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: new Map(),
+      text: async () => JSON.stringify(payload),
+      json: async () => payload
+    };
+  };
+
+  const stats = await fetchContributionStats("active-user", "2026-01-01", "2026-01-02", 100);
+
+  assert.equal(calls.length, 2, "fetch retried after 403");
+  assert.ok(warnings.some((w) => /rate limit/i.test(w)), "warned about rate limit");
+  assert.deepEqual(stats.days.map((d) => d.date), ["2026-01-01", "2026-01-02"]);
+  assert.equal(stats.activityTotals.commits, 3);
 });
