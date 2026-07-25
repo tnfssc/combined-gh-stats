@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-graph
+  cancel-in-progress: true
+
 jobs:
   update-graph:
     runs-on: ubuntu-latest
@@ -19,11 +23,20 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Verify USERS is configured
+        run: |
+          if [ -z "${USERS}" ]; then
+            echo "::error::The USERS repository variable is empty or not set. Add a comma-separated account list (e.g. account1,account2) as a repository variable named USERS."
+            exit 1
+          fi
 
       - name: Generate merged contribution graph
         run: npm run generate

@@ -1,6 +1,17 @@
 {
   "name": "combine-gh-stats",
+  "description": "Generate a single GitHub-style contribution heatmap and activity overview SVG from multiple accounts and keep it up to date with GitHub Actions.",
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=20.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tnfssc/combined-gh-stats.git"
+  },
   "scripts": {
     "generate": "node --env-file-if-exists=.env scripts/generate-combined-svg.mjs",
     "test": "node --test",
