@@ -149,14 +149,6 @@ function formatNumber(n) {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-function envKeyForUser(login) {
-  return `GITHUB_TOKEN_${login.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
-}
-
-function tokenForUser(login) {
-  return process.env[envKeyForUser(login)] || process.env.GITHUB_TOKEN || "";
-}
-
 function pickThreshold(sortedValues, ratio) {
   if (sortedValues.length === 0) {
     return 0;
@@ -404,9 +396,9 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
     return normalizeMockContributionStats(mockData[login], login, from, to);
   }
 
-  const token = tokenForUser(login);
+  const token = process.env.GITHUB_TOKEN;
   if (!token) {
-    throw new Error(`Missing GITHUB_TOKEN or ${envKeyForUser(login)} for ${login}`);
+    throw new Error("Missing GITHUB_TOKEN environment variable");
   }
 
   const maxQueryDays = parsePositiveInteger(process.env.MAX_QUERY_DAYS, DEFAULT_QUERY_DAYS);
