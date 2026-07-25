@@ -330,7 +330,15 @@ async function fetchContributionStatsRange(login, token, from, to, maxRepositori
     })
   });
 
-  const payload = await response.json();
+  const responseText = await response.text();
+  let payload = {};
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      payload = {};
+    }
+  }
   const resourceLimitExceeded = payload.errors?.length
     && payload.errors.every((error) => error.type === "RESOURCE_LIMITS_EXCEEDED");
 
@@ -349,7 +357,8 @@ async function fetchContributionStatsRange(login, token, from, to, maxRepositori
 
   if (!response.ok || payload.errors?.length) {
     const message = payload.errors?.[0]?.message || response.statusText;
-    throw new Error(`GitHub API request failed for ${login}: ${message}`);
+    const snippet = responseText.slice(0, 200);
+    throw new Error(`GitHub API request failed for ${login}: ${message} (HTTP ${response.status}${snippet ? `: ${snippet}` : ""})`);
   }
 
   const user = payload.data?.user;

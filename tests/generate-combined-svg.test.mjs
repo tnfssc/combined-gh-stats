@@ -74,8 +74,9 @@ test("bounds request ranges, splits resource errors, and merges contribution sta
     if (variables.from.startsWith("2026-01-01") && variables.to.startsWith("2026-01-04")) {
       return {
         ok: true,
+        status: 200,
         statusText: "OK",
-        json: async () => ({
+        text: async () => JSON.stringify({
           errors: [{
             type: "RESOURCE_LIMITS_EXCEEDED",
             message: "Resource limits for this query exceeded."
@@ -132,8 +133,9 @@ test("bounds request ranges, splits resource errors, and merges contribution sta
 
     return {
       ok: true,
+      status: 200,
       statusText: "OK",
-      json: async () => payload
+      text: async () => JSON.stringify(payload)
     };
   };
 
@@ -221,18 +223,20 @@ test("clamps MAX_QUERY_DAYS above 365 to 365", async (context) => {
       `range ${variables.from}..${variables.to} exceeds 365-day window`
     );
 
+    const payload = successfulPayload({
+      days: [{ date: variables.to.slice(0, 10), contributionCount: 1 }],
+      commits: 1,
+      issues: 0,
+      pullRequests: 0,
+      reviews: 0,
+      restricted: 0,
+      repositories: []
+    });
     return {
       ok: true,
       statusText: "OK",
-      json: async () => successfulPayload({
-        days: [{ date: variables.to.slice(0, 10), contributionCount: 1 }],
-        commits: 1,
-        issues: 0,
-        pullRequests: 0,
-        reviews: 0,
-        restricted: 0,
-        repositories: []
-      })
+      text: async () => JSON.stringify(payload),
+      json: async () => payload
     };
   };
 
@@ -299,18 +303,20 @@ test("dedupes days that appear at chunk boundaries across consecutive chunks", a
           ]
         : [];
 
+    const payload = successfulPayload({
+      days,
+      commits: days.reduce((sum, day) => sum + day.contributionCount, 0),
+      issues: 0,
+      pullRequests: 0,
+      reviews: 0,
+      restricted: 0,
+      repositories: []
+    });
     return {
       ok: true,
       statusText: "OK",
-      json: async () => successfulPayload({
-        days,
-        commits: days.reduce((sum, day) => sum + day.contributionCount, 0),
-        issues: 0,
-        pullRequests: 0,
-        reviews: 0,
-        restricted: 0,
-        repositories: []
-      })
+      text: async () => JSON.stringify(payload),
+      json: async () => payload
     };
   };
 
@@ -325,4 +331,51 @@ test("dedupes days that appear at chunk boundaries across consecutive chunks", a
     "2026-01-02",
     "2026-01-03"
   ]);
+});
+
+test("throws error with status code (not SyntaxError) on non-JSON 5xx response", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
+    if (originalMockFile === undefined) {
+      delete process.env.MOCK_DATA_FILE;
+    } else {
+      process.env.MOCK_DATA_FILE = originalMockFile;
+    }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
+  });
+
+  process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "4";
+  delete process.env.MOCK_DATA_FILE;
+
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 500,
+    statusText: "Internal Server Error",
+    text: async () => "<!DOCTYPE html><html><body>Server error</body></html>"
+  });
+
+  await assert.rejects(
+    fetchContributionStats("active-user", "2026-01-01", "2026-01-08", 100),
+    (error) => {
+      assert.equal(error.name, "Error", "should not be a SyntaxError");
+      assert.ok(!error.message.includes("SyntaxError"), "should not be a SyntaxError");
+      assert.ok(error.message.includes("500"), `message should include status 500: ${error.message}`);
+      return true;
+    }
+  );
 });
