@@ -12,12 +12,6 @@ const EMPTY_ACTIVITY_TOTALS = Object.freeze({
   pullRequests: 0,
   reviews: 0
 });
-const ACTIVITY_SECTIONS = [
-  { key: "commits", label: "Commits" },
-  { key: "pullRequests", label: "Pull requests" },
-  { key: "issues", label: "Issues" },
-  { key: "reviews", label: "Code review" }
-];
 const CONTRIBUTIONS_QUERY = `
   query CombinedContributionStats($login: String!, $from: DateTime!, $to: DateTime!, $maxRepositories: Int!) {
     user(login: $login) {
@@ -134,10 +128,6 @@ function escapeXml(value) {
     .replaceAll("'", "&apos;");
 }
 
-function estimateTextWidth(text, fontSize = 14) {
-  return text.length * fontSize * 0.58;
-}
-
 function truncateText(text, maxLength) {
   if (text.length <= maxLength) {
     return text;
@@ -195,10 +185,6 @@ function createActivityTotals(activity = {}) {
     pullRequests: Number(activity.pullRequests ?? activity.prs) || 0,
     reviews: Number(activity.reviews ?? activity.codeReviews) || 0
   };
-}
-
-function sumActivityTotals(totals) {
-  return totals.commits + totals.issues + totals.pullRequests + totals.reviews;
 }
 
 function mergeActivityTotals(target, source) {
