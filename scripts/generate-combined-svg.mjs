@@ -12,12 +12,7 @@ const EMPTY_ACTIVITY_TOTALS = Object.freeze({
   pullRequests: 0,
   reviews: 0
 });
-const ACTIVITY_SECTIONS = [
-  { key: "commits", label: "Commits" },
-  { key: "pullRequests", label: "Pull requests" },
-  { key: "issues", label: "Issues" },
-  { key: "reviews", label: "Code review" }
-];
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const CONTRIBUTIONS_QUERY = `
   query CombinedContributionStats($login: String!, $from: DateTime!, $to: DateTime!, $maxRepositories: Int!) {
     user(login: $login) {
@@ -149,6 +144,45 @@ function formatNumber(n) {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+const MAX_RATE_LIMIT_ATTEMPTS = 5;
+const RATE_LIMIT_BASE_BACKOFF_MS = 1000;
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function parseHeaderSeconds(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+  const seconds = Number.parseFloat(value);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+function computeRateLimitSleepMs(response, attempt) {
+  const headers = response.headers || {};
+  const getHeader = typeof headers.get === "function" ? headers.get.bind(headers) : (name) => headers[name];
+
+  const retryAfter = parseHeaderSeconds(getHeader("Retry-After"));
+  if (retryAfter != null) {
+    return Math.max(0, retryAfter * 1000);
+  }
+
+  const reset = parseHeaderSeconds(getHeader("X-RateLimit-Reset"));
+  if (reset != null) {
+    const nowSeconds = Date.now() / 1000;
+    const remaining = reset - nowSeconds;
+    if (remaining > 0) {
+      return remaining * 1000;
+    }
+    return 0;
+  }
+
+  return RATE_LIMIT_BASE_BACKOFF_MS * 2 ** attempt;
+}
+
 function envKeyForUser(login) {
   return `GITHUB_TOKEN_${login.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
 }
@@ -203,10 +237,6 @@ function createActivityTotals(activity = {}) {
     pullRequests: Number(activity.pullRequests ?? activity.prs) || 0,
     reviews: Number(activity.reviews ?? activity.codeReviews) || 0
   };
-}
-
-function sumActivityTotals(totals) {
-  return totals.commits + totals.issues + totals.pullRequests + totals.reviews;
 }
 
 function mergeActivityTotals(target, source) {
@@ -333,25 +363,55 @@ function normalizeMockContributionStats(entry, login, from, to) {
 }
 
 async function fetchContributionStatsRange(login, token, from, to, maxRepositories, ranges) {
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `bearer ${token}`,
-      "Content-Type": "application/json",
-      "User-Agent": "combine-gh-stats"
-    },
-    body: JSON.stringify({
-      query: CONTRIBUTIONS_QUERY,
-      variables: {
-        login,
-        from: `${from}T00:00:00.000Z`,
-        to: `${to}T23:59:59.999Z`,
-        maxRepositories
-      }
-    })
-  });
+  let response;
+  let payload;
 
-  const payload = await response.json();
+  for (let attempt = 0; attempt < MAX_RATE_LIMIT_ATTEMPTS; attempt++) {
+    response = await fetch(GRAPHQL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `bearer ${token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "combine-gh-stats"
+      },
+      body: JSON.stringify({
+        query: CONTRIBUTIONS_QUERY,
+        variables: {
+          login,
+          from: `${from}T00:00:00.000Z`,
+          to: `${to}T23:59:59.999Z`,
+          maxRepositories
+        }
+      })
+    });
+
+    if (response.status === 403 || response.status === 429) {
+      const sleepMs = computeRateLimitSleepMs(response, attempt);
+      console.warn(
+        `GitHub API rate limit hit for ${login} (${response.status}); sleeping ${Math.round(sleepMs)} ms before retry (attempt ${attempt + 1}/${MAX_RATE_LIMIT_ATTEMPTS})`
+      );
+      await sleep(sleepMs);
+      continue;
+    }
+
+    break;
+  }
+
+  if (response.status === 403 || response.status === 429) {
+    throw new Error(
+      `GitHub API rate limit exceeded for ${login} after ${MAX_RATE_LIMIT_ATTEMPTS} attempts; aborting ${from} to ${to}`
+    );
+  }
+
+  const responseText = await response.text();
+  payload = {};
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      payload = {};
+    }
+  }
   const resourceLimitExceeded = payload.errors?.length
     && payload.errors.every((error) => error.type === "RESOURCE_LIMITS_EXCEEDED");
 
@@ -370,7 +430,8 @@ async function fetchContributionStatsRange(login, token, from, to, maxRepositori
 
   if (!response.ok || payload.errors?.length) {
     const message = payload.errors?.[0]?.message || response.statusText;
-    throw new Error(`GitHub API request failed for ${login}: ${message}`);
+    const snippet = responseText.slice(0, 200);
+    throw new Error(`GitHub API request failed for ${login}: ${message} (HTTP ${response.status}${snippet ? `: ${snippet}` : ""})`);
   }
 
   const user = payload.data?.user;
@@ -404,12 +465,16 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
     return normalizeMockContributionStats(mockData[login], login, from, to);
   }
 
-  const token = tokenForUser(login);
+  const token = process.env.GITHUB_TOKEN;
   if (!token) {
-    throw new Error(`Missing GITHUB_TOKEN or ${envKeyForUser(login)} for ${login}`);
+    throw new Error("Missing GITHUB_TOKEN environment variable");
   }
 
-  const maxQueryDays = parsePositiveInteger(process.env.MAX_QUERY_DAYS, DEFAULT_QUERY_DAYS);
+  const requestedQueryDays = parsePositiveInteger(process.env.MAX_QUERY_DAYS, DEFAULT_QUERY_DAYS);
+  const maxQueryDays = Math.min(requestedQueryDays, 365);
+  if (requestedQueryDays > 365) {
+    console.warn(`MAX_QUERY_DAYS=${requestedQueryDays} exceeds GitHub's 1-year window; clamping to 365.`);
+  }
   const startDate = new Date(`${from}T00:00:00.000Z`);
   const endDate = new Date(`${to}T00:00:00.000Z`);
   const ranges = [];
@@ -432,12 +497,19 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
   }
 
   const days = [];
+  const seenDates = new Set();
   const activityTotals = { ...EMPTY_ACTIVITY_TOTALS };
   const repositories = new Map();
   let restrictedContributions = 0;
 
   for (const range of ranges) {
-    days.push(...range.days);
+    for (const day of range.days) {
+      if (seenDates.has(day.date)) {
+        continue;
+      }
+      seenDates.add(day.date);
+      days.push(day);
+    }
     mergeActivityTotals(activityTotals, range.activityTotals);
     mergeRepositoryTotals(repositories, range.repositories);
     restrictedContributions += range.restrictedContributions;
@@ -451,7 +523,7 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
   };
 }
 
-function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, title }) {
+export function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, title }) {
   const nonZeroCounts = days.map((day) => day.count).filter((count) => count > 0).sort((a, b) => a - b);
   const thresholds = [
     pickThreshold(nonZeroCounts, 0.25),
@@ -467,7 +539,6 @@ function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, 
   const width = left + weeks.length * (cellSize + gap) + 8;
   const height = top + 7 * (cellSize + gap) + footerHeight;
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   let lastRenderedMonth = -1;
   const monthLabels = weeks.map((week, weekIndex) => {
     const firstOfMonth = week.find((day) => day.date.slice(8) === "01");
@@ -482,7 +553,7 @@ function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, 
 
     lastRenderedMonth = monthIndex;
     const x = left + weekIndex * (cellSize + gap);
-    return `<text class="fg-muted" x="${x}" y="16" font-size="10">${monthNames[monthIndex]}</text>`;
+    return `<text class="fg-muted" x="${x}" y="16" font-size="10">${MONTH_NAMES[monthIndex]}</text>`;
   }).join("");
 
   const weekdayLabels = [
@@ -559,7 +630,7 @@ function computeCurrentStreak(days) {
   return streak;
 }
 
-function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, restrictedContributions, title }) {
+export function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, restrictedContributions, repositories, maxOverviewRepos, title }) {
   const weeklyTotals = weeks.map((week) => week.reduce((sum, d) => sum + d.count, 0));
   const nonZeroWeekly = weeklyTotals.filter((t) => t > 0).sort((a, b) => a - b);
   const weekThresholds = [
@@ -588,9 +659,37 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
     ? `GitHub reports ${formatNumber(restrictedContributions)} private contribution${restrictedContributions === 1 ? "" : "s"} in this window, so commits, PRs, issues, and reviews may not add up to the total.`
     : "";
   const restrictedNoteY = footerY + 11;
-  const height = restrictedNote ? restrictedNoteY + 8 : footerY + 14;
+  const contentBottomY = restrictedNote ? restrictedNoteY + 8 : footerY + 14;
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const topRepositories = Array.isArray(repositories)
+    ? [...repositories]
+        .sort((left, right) => right.totalCount - left.totalCount || left.nameWithOwner.localeCompare(right.nameWithOwner))
+        .slice(0, Math.max(0, Number(maxOverviewRepos) || 0))
+    : [];
+
+  const repoSectionGap = 10;
+  const repoLabelY = contentBottomY + repoSectionGap + 10;
+  const repoEntryStep = 14;
+  const repoFirstEntryY = repoLabelY + 16;
+  const repoContentWidth = width - 2 * padX;
+  const repoCountFont = 11;
+  const repoCountGap = 8;
+
+  const repoEntries = topRepositories.map((repository, index) => {
+    const countText = formatNumber(repository.totalCount);
+    const countWidth = estimateTextWidth(countText, repoCountFont);
+    const availableNameWidth = repoContentWidth - countWidth - repoCountGap;
+    const maxNameChars = Math.max(4, Math.floor(availableNameWidth / (repoCountFont * 0.58)));
+    const nameText = truncateText(repository.nameWithOwner, maxNameChars);
+    const y = repoFirstEntryY + index * repoEntryStep;
+    return `<text x="${padX}" y="${y}" font-size="${repoCountFont}"><tspan class="fg">${escapeXml(nameText)}</tspan><tspan class="fg-muted" x="${width - padX}" text-anchor="end">${escapeXml(countText)}</tspan></text>`;
+  });
+
+  const hasRepos = repoEntries.length > 0;
+  const height = hasRepos
+    ? repoFirstEntryY + (repoEntries.length - 1) * repoEntryStep + 6
+    : contentBottomY;
+
   let lastMonth = -1;
   const barsAndLabels = weeks.map((week, wi) => {
     const total = weeklyTotals[wi];
@@ -607,7 +706,7 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
       const monthIndex = Number.parseInt(firstOfMonth.date.slice(5, 7), 10) - 1;
       if (monthIndex !== lastMonth) {
         lastMonth = monthIndex;
-        monthLabel = `<text class="fg-muted" x="${x}" y="${monthLabelY}" font-size="10">${monthNames[monthIndex]}</text>`;
+        monthLabel = `<text class="fg-muted" x="${x}" y="${monthLabelY}" font-size="10">${MONTH_NAMES[monthIndex]}</text>`;
       }
     }
 
@@ -671,6 +770,8 @@ function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, total
     `  <line class="divider" x1="${padX}" y1="${dividerY}" x2="${width - padX}" y2="${dividerY}" stroke-width="1" />`,
     `  <text x="${padX}" y="${footerY}" font-size="11">${footerTspans}</text>`,
     restrictedNote ? `  <text class="fg-muted" x="${padX}" y="${restrictedNoteY}" font-size="9">${escapeXml(restrictedNote)}</text>` : "",
+    hasRepos ? `  <text class="fg-muted" x="${padX}" y="${repoLabelY}" font-size="10" font-weight="600">Top repositories</text>` : "",
+    ...repoEntries.map((entry) => `  ${entry}`),
     "</svg>"
   ].join("\n");
 }
