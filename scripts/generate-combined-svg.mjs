@@ -388,7 +388,11 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
     throw new Error("Missing GITHUB_TOKEN environment variable");
   }
 
-  const maxQueryDays = parsePositiveInteger(process.env.MAX_QUERY_DAYS, DEFAULT_QUERY_DAYS);
+  const requestedQueryDays = parsePositiveInteger(process.env.MAX_QUERY_DAYS, DEFAULT_QUERY_DAYS);
+  const maxQueryDays = Math.min(requestedQueryDays, 365);
+  if (requestedQueryDays > 365) {
+    console.warn(`MAX_QUERY_DAYS=${requestedQueryDays} exceeds GitHub's 1-year window; clamping to 365.`);
+  }
   const startDate = new Date(`${from}T00:00:00.000Z`);
   const endDate = new Date(`${to}T00:00:00.000Z`);
   const ranges = [];

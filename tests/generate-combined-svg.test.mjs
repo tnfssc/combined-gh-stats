@@ -176,3 +176,73 @@ test("bounds request ranges, splits resource errors, and merges contribution sta
   ]);
   assert.equal(warnings.length, 1);
 });
+
+test("clamps MAX_QUERY_DAYS above 365 to 365", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  const originalMockFile = process.env.MOCK_DATA_FILE;
+  const originalMaxQueryDays = process.env.MAX_QUERY_DAYS;
+  const originalWarn = console.warn;
+  const requests = [];
+  const warnings = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    console.warn = originalWarn;
+    if (originalToken === undefined) {
+      delete process.env.GITHUB_TOKEN;
+    } else {
+      process.env.GITHUB_TOKEN = originalToken;
+    }
+    if (originalMockFile === undefined) {
+      delete process.env.MOCK_DATA_FILE;
+    } else {
+      process.env.MOCK_DATA_FILE = originalMockFile;
+    }
+    if (originalMaxQueryDays === undefined) {
+      delete process.env.MAX_QUERY_DAYS;
+    } else {
+      process.env.MAX_QUERY_DAYS = originalMaxQueryDays;
+    }
+  });
+
+  process.env.GITHUB_TOKEN = "test-token";
+  process.env.MAX_QUERY_DAYS = "400";
+  delete process.env.MOCK_DATA_FILE;
+  console.warn = (message) => warnings.push(message);
+  globalThis.fetch = async (_url, options) => {
+    const { variables } = JSON.parse(options.body);
+    requests.push([variables.from.slice(0, 10), variables.to.slice(0, 10)]);
+
+    const fromMs = new Date(variables.from).getTime();
+    const toMs = new Date(variables.to).getTime();
+    assert.ok(
+      toMs - fromMs < 365 * 24 * 60 * 60 * 1000,
+      `range ${variables.from}..${variables.to} exceeds 365-day window`
+    );
+
+    return {
+      ok: true,
+      statusText: "OK",
+      json: async () => successfulPayload({
+        days: [{ date: variables.to.slice(0, 10), contributionCount: 1 }],
+        commits: 1,
+        issues: 0,
+        pullRequests: 0,
+        reviews: 0,
+        restricted: 0,
+        repositories: []
+      })
+    };
+  };
+
+  const stats = await fetchContributionStats("active-user", "2026-01-01", "2026-12-31", 100);
+
+  assert.equal(requests.length, 1, "single request expected for a within-year window");
+  assert.deepEqual(requests[0], ["2026-01-01", "2026-12-31"]);
+  assert.equal(stats.activityTotals.commits, 1);
+  assert.ok(
+    warnings.some((m) => /clamping to 365/.test(m)),
+    `expected a clamp warning, got: ${JSON.stringify(warnings)}`
+  );
+});
