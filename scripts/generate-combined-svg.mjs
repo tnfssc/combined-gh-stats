@@ -12,6 +12,9 @@ const EMPTY_ACTIVITY_TOTALS = Object.freeze({
   pullRequests: 0,
   reviews: 0
 });
+// SVGs are drawn on a ~790px canvas but declared larger so GitHub (which only shrinks images, never grows them)
+// scales them down to fill the full README column.
+const DISPLAY_SCALE = 1.2;
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const CONTRIBUTIONS_QUERY = `
   query CombinedContributionStats($login: String!, $from: DateTime!, $to: DateTime!, $maxRepositories: Int!) {
@@ -624,7 +627,7 @@ export function renderContributionHeatmapSvg({ days, weeks, users, totalContribu
   const subtitle = `${formatNumber(totalContributions)} contributions across ${users.length} account${users.length === 1 ? "" : "s"}`;
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(width * DISPLAY_SCALE)}" height="${Math.round(height * DISPLAY_SCALE)}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
     ...themeStyle([
       ".cell { transform-box: fill-box; transform-origin: center; animation: cell-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }",
       "@keyframes cell-in { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }",
@@ -759,7 +762,7 @@ export function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals
   const overloadDelayMs = barsDelayMs + numWeeks * 14 + 400;
 
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(width * DISPLAY_SCALE)}" height="${Math.round(height * DISPLAY_SCALE)}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">`,
     ...themeStyle([
       ".grid { stroke: var(--hairline); stroke-width: 1; stroke-dasharray: 2 3; }",
       ".baseline { stroke: var(--hairline); stroke-width: 1; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 0.9s cubic-bezier(0.6, 0, 0.2, 1) 0.2s forwards; }",
