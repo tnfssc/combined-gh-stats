@@ -180,12 +180,11 @@ test("bounds request ranges, splits resource errors, and merges contribution sta
 });
 
 
-function buildOverviewInput({ repositories, maxOverviewRepos } = {}) {
-  // A multi-week grid keeps the SVG width realistic so repo names are not truncated.
+function buildOverviewInput({ spikeWeek } = {}) {
   const days = [];
-  for (let i = 0; i < 10 * 7; i += 1) {
+  for (let i = 0; i < 40 * 7; i += 1) {
     const date = `2026-01-${String((i % 28) + 1).padStart(2, "0")}`;
-    days.push({ date, count: i % 5 });
+    days.push({ date, count: Math.floor(i / 7) === spikeWeek ? 500 : 2 });
   }
   const weeks = [];
   for (let index = 0; index < days.length; index += 7) {
@@ -193,11 +192,9 @@ function buildOverviewInput({ repositories, maxOverviewRepos } = {}) {
   }
   return {
     users: ["active-user"],
-    dayCount: 70,
+    dayCount: 280,
     days,
     weeks,
-    repositories,
-    maxOverviewRepos,
     activityTotals: { commits: 7, issues: 1, pullRequests: 2, reviews: 1 },
     totalContributions: 10,
     restrictedContributions: 0,
@@ -205,29 +202,20 @@ function buildOverviewInput({ repositories, maxOverviewRepos } = {}) {
   };
 }
 
-test("renderOverviewSvg renders top repositories with their counts", () => {
-  const repositories = [
-    { nameWithOwner: "acme/api", url: "https://github.com/acme/api", totalCount: 7 },
-    { nameWithOwner: "acme/app", url: "https://github.com/acme/app", totalCount: 6 },
-    { nameWithOwner: "acme/web", url: "https://github.com/acme/web", totalCount: 3 }
-  ];
-  const svg = renderOverviewSvg(buildOverviewInput({ repositories, maxOverviewRepos: 2 }));
+test("renderOverviewSvg marks weeks above the cap as overloaded", () => {
+  const svg = renderOverviewSvg(buildOverviewInput({ spikeWeek: 4 }));
 
-  assert.ok(svg.includes("Top repositories"), "expected a Top repositories section");
-  assert.ok(svg.includes("acme/api"), "expected top repo nameWithOwner");
-  assert.ok(svg.includes("acme/app"), "expected second repo nameWithOwner");
-  assert.ok(svg.includes(">7</tspan>"), "expected formatted top repo count");
-  assert.ok(svg.includes(">6</tspan>"), "expected formatted second repo count");
-  // maxOverviewRepos limits the list to 2 entries.
-  assert.ok(!svg.includes("acme/web"), "did not expect third repo beyond maxOverviewRepos");
+  assert.equal((svg.match(/class="bar overloaded"/g) || []).length, 1, "expected one overloaded bar");
+  assert.equal((svg.match(/OVERLOADED/g) || []).length, 1, "expected one overloaded badge");
+  assert.ok(!svg.includes("Top repositories"), "did not expect a Top repositories section");
 });
 
-test("renderOverviewSvg handles an empty repository list without crashing", () => {
-  const svg = renderOverviewSvg(buildOverviewInput({ repositories: [], maxOverviewRepos: 3 }));
+test("renderOverviewSvg renders without overloaded weeks when activity is even", () => {
+  const svg = renderOverviewSvg(buildOverviewInput());
 
   assert.ok(svg.startsWith("<svg"), "expected valid svg output");
   assert.ok(svg.endsWith("</svg>"), "expected closed svg element");
-  assert.ok(!svg.includes("Top repositories"), "did not expect a Top repositories section for empty list");
+  assert.ok(!svg.includes("OVERLOADED"), "did not expect an overloaded badge");
 });
 
 test("clamps MAX_QUERY_DAYS above 365 to 365", async (context) => {
@@ -504,4 +492,16 @@ test("retries on HTTP 403 rate limit then succeeds", async (context) => {
   assert.ok(warnings.some((w) => /rate limit/i.test(w)), "warned about rate limit");
   assert.deepEqual(stats.days.map((d) => d.date), ["2026-01-01", "2026-01-02"]);
   assert.equal(stats.activityTotals.commits, 3);
+});
+
+test("renderOverviewSvg shows a momentum status only when the last 7 days beat the recent average", () => {
+  const input = buildOverviewInput();
+  assert.ok(!renderOverviewSvg(input).includes("usual pace"), "did not expect a status for steady activity");
+
+  for (const day of input.days.slice(-7)) {
+    day.count = 50;
+  }
+  const svg = renderOverviewSvg(input);
+  assert.ok(svg.includes("Unstoppable"), "expected the top status tier for a big spike");
+  assert.ok(svg.includes("usual pace"), "expected the pace multiplier");
 });

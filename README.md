@@ -65,7 +65,7 @@ npm test
 
 The workflow uses GitHub Actions' built-in `GITHUB_TOKEN`, and local runs use `GITHUB_TOKEN` from `.env`. Only this single shared token is used for all accounts.
 
-When GitHub reports private contributions in the selected window, the activity overview adds a note explaining that GitHub does not break those contributions down into commits, PRs, issues, and reviews.
+When GitHub reports private contributions in the selected window, the activity overview's accessible description notes that GitHub does not break those contributions down into commits, PRs, issues, and reviews.
 
 ## Customization
 
@@ -75,7 +75,6 @@ When GitHub reports private contributions in the selected window, the activity o
 - `OVERVIEW_OUTPUT_FILE` changes the destination activity overview SVG path
 - `OVERVIEW_TITLE` changes the heading shown inside the activity overview SVG
 - `MAX_REPOSITORIES` caps the number of repositories queried per account
-- `OVERVIEW_REPOS_TO_SHOW` sets how many top repositories appear in the overview
 - `MAX_QUERY_DAYS` caps the number of days each GraphQL query window can span
 - `MOCK_DATA_FILE` points the renderer at a local JSON fixture instead of the live API
 
