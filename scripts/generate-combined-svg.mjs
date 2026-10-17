@@ -183,13 +183,17 @@ function computeRateLimitSleepMs(response, attempt) {
   return RATE_LIMIT_BASE_BACKOFF_MS * 2 ** attempt;
 }
 
-function pickThreshold(sortedValues, ratio) {
-  if (sortedValues.length === 0) {
+// Log-spaced thresholds so a few very large days/weeks don't wash out everything else.
+function logThresholds(maxValue) {
+  const logMax = Math.log1p(Math.max(maxValue, 0));
+  return [1, 2, 3].map((step) => Math.expm1(logMax * step / 4));
+}
+
+function logScale(value, maxValue) {
+  if (value <= 0 || maxValue <= 0) {
     return 0;
   }
-
-  const index = Math.max(0, Math.ceil(sortedValues.length * ratio) - 1);
-  return sortedValues[index];
+  return Math.log1p(value) / Math.log1p(maxValue);
 }
 
 function colorForCount(count, thresholds) {
@@ -516,12 +520,7 @@ export async function fetchContributionStats(login, from, to, maxRepositories) {
 }
 
 export function renderContributionHeatmapSvg({ days, weeks, users, totalContributions, title }) {
-  const nonZeroCounts = days.map((day) => day.count).filter((count) => count > 0).sort((a, b) => a - b);
-  const thresholds = [
-    pickThreshold(nonZeroCounts, 0.25),
-    pickThreshold(nonZeroCounts, 0.5),
-    pickThreshold(nonZeroCounts, 0.75)
-  ];
+  const thresholds = logThresholds(Math.max(0, ...days.map((day) => day.count)));
 
   const cellSize = 13;
   const gap = 3;
@@ -624,13 +623,8 @@ function computeCurrentStreak(days) {
 
 export function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals, totalContributions, restrictedContributions, repositories, maxOverviewRepos, title }) {
   const weeklyTotals = weeks.map((week) => week.reduce((sum, d) => sum + d.count, 0));
-  const nonZeroWeekly = weeklyTotals.filter((t) => t > 0).sort((a, b) => a - b);
-  const weekThresholds = [
-    pickThreshold(nonZeroWeekly, 0.25),
-    pickThreshold(nonZeroWeekly, 0.5),
-    pickThreshold(nonZeroWeekly, 0.75)
-  ];
   const maxWeekly = Math.max(...weeklyTotals, 1);
+  const weekThresholds = logThresholds(maxWeekly);
   const currentStreak = computeCurrentStreak(days);
 
   const barWidth = 13;
@@ -686,7 +680,7 @@ export function renderOverviewSvg({ users, dayCount, days, weeks, activityTotals
   const barsAndLabels = weeks.map((week, wi) => {
     const total = weeklyTotals[wi];
     const level = colorForCount(total, weekThresholds);
-    const barH = total === 0 ? 2 : Math.max(3, Math.round(maxBarH * total / maxWeekly));
+    const barH = total === 0 ? 2 : Math.max(3, Math.round(maxBarH * logScale(total, maxWeekly)));
     const x = padX + wi * barStep;
     const y = barsBottomY - barH;
     const titleText = `Week of ${week[0]?.date ?? "unknown"}: ${total} contribution${total === 1 ? "" : "s"}`;
